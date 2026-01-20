@@ -10,12 +10,20 @@ app.use(express.json());
 // 🔐 Routes
 app.use('/auth', require('./routes/authRoutes'));
 app.use('/students', require('./routes/students'));
-app.use('/save-token', require('./routes/saveToken')); // ✅ IMPORTANT
+app.use('/save-token', require('./routes/saveToken'));
 app.use('/cases', require('./routes/cases'));
 
-// Health check
+// Root check
 app.get('/', (req, res) => {
   res.send('Backend running');
+});
+
+// ✅ Health check (ADD THIS)
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    message: 'Server is healthy'
+  });
 });
 
 const PORT = process.env.PORT || 5000;
