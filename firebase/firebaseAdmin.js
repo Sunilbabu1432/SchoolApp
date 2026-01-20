@@ -1,12 +1,11 @@
 const admin = require('firebase-admin');
 
-if (!process.env.FIREBASE_SERVICE_ACCOUNT) {
-  throw new Error('FIREBASE_SERVICE_ACCOUNT env variable missing');
-}
-
 if (!admin.apps.length) {
   const serviceAccount = JSON.parse(
-    process.env.FIREBASE_SERVICE_ACCOUNT
+    Buffer.from(
+      process.env.FIREBASE_SERVICE_ACCOUNT_BASE64,
+      'base64'
+    ).toString('utf8')
   );
 
   admin.initializeApp({
