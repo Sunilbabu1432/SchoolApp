@@ -7,6 +7,9 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+require('./firebase/firebaseAdmin');
+
+
 // 🔐 Routes
 app.use('/auth', require('./routes/authRoutes'));
 app.use('/students', require('./routes/students'));
