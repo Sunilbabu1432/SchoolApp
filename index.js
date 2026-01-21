@@ -19,6 +19,10 @@ app.use('/cases', require('./routes/cases'));
 app.use('/teachers', require('./routes/teachers'));
 
 
+app.use('/notifications', require('./routes/notifications'));
+
+
+
 
 
 // Root check
