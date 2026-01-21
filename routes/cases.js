@@ -4,6 +4,11 @@ const auth = require('../middleware/auth');
 const salesforceLogin = require('../config/salesforce');
 const { sendPush } = require('../services/pushService');
 
+/**
+ * ================================
+ * CREATE CASE (Teacher → Manager)
+ * ================================
+ */
 router.post('/', auth, async (req, res) => {
   try {
     const { studentAccountId, subject, description } = req.body;
@@ -25,60 +30,79 @@ router.post('/', auth, async (req, res) => {
 
     console.log('✅ CASE CREATED =>', caseResult.id);
 
-    // 2️⃣ Fetch Student + Manager
+    // 2️⃣ Fetch Student Account (ONLY Manager lookup)
     const accountResult = await conn.query(`
-      SELECT Id, Name,
-             Manager__r.Id,
-             Manager__r.Name,
-             Manager__r.FCM_Token__c
+      SELECT Id, Name, Manager__c
       FROM Account
       WHERE Id = '${studentAccountId}'
       LIMIT 1
     `);
 
     if (
-      accountResult.records.length &&
-      accountResult.records[0].Manager__r &&
-      accountResult.records[0].Manager__r.FCM_Token__c
+      !accountResult.records.length ||
+      !accountResult.records[0].Manager__c
     ) {
-      const manager = accountResult.records[0].Manager__r;
-      const studentName = accountResult.records[0].Name;
+      console.log('❌ MANAGER NOT LINKED TO STUDENT');
+      return res.json({
+        success: true,
+        caseId: caseResult.id,
+      });
+    }
+
+    const managerContactId = accountResult.records[0].Manager__c;
+    const studentName = accountResult.records[0].Name;
+
+    // 3️⃣ Fetch Manager Contact + FCM Token
+    const managerResult = await conn.query(`
+      SELECT Id, Name, FCM_Token__c
+      FROM Contact
+      WHERE Id = '${managerContactId}'
+      LIMIT 1
+    `);
+
+    if (
+      managerResult.records.length &&
+      managerResult.records[0].FCM_Token__c
+    ) {
+      const manager = managerResult.records[0];
 
       console.log('👤 MANAGER FOUND =>', manager.Name);
 
-      // 3️⃣ SEND PUSH (FULL PAYLOAD)
+      // 4️⃣ Send Push Notification
       await sendPush(
-  manager.FCM_Token__c,
-  'New Student Complaint',
-  subject,
-  {
-    type: 'CASE',
-    caseId: caseResult.id,
-    subject: subject,
-    description: description || '',
-    studentName: studentName,
-  }
-);
-
+        manager.FCM_Token__c,
+        'New Student Complaint',
+        subject,
+        {
+          type: 'CASE',
+          caseId: caseResult.id,
+          subject,
+          description: description || '',
+          studentName,
+        }
+      );
     } else {
-      console.log('❌ MANAGER OR TOKEN NOT FOUND');
+      console.log('❌ MANAGER TOKEN NOT FOUND');
     }
 
     res.json({
       success: true,
       caseId: caseResult.id,
     });
-
   } catch (err) {
-    console.error('CASE ERROR =>', err.message);
+    console.error('❌ CASE ERROR =>', err.message);
     res.status(500).json({ message: 'Failed to create case' });
   }
 });
 
+/**
+ * ================================
+ * GET CASE DETAILS
+ * ================================
+ */
 router.get('/:caseId', auth, async (req, res) => {
   try {
     const { caseId } = req.params;
-
     const conn = await salesforceLogin();
 
     const result = await conn.query(`
@@ -102,12 +126,10 @@ router.get('/:caseId', auth, async (req, res) => {
       status: c.Status,
       studentName: c.Account?.Name || '',
     });
-
   } catch (err) {
-    console.error('GET CASE ERROR =>', err.message);
+    console.error('❌ GET CASE ERROR =>', err.message);
     res.status(500).json({ message: 'Failed to fetch case' });
   }
 });
-
 
 module.exports = router;
