@@ -7,10 +7,11 @@ router.post('/', auth, async (req, res) => {
   try {
     console.log('🔥 SAVE TOKEN HIT');
 
-    const { token } = req.body;
-    const contactId = req.user.contactId; // ✅ FIX HERE
+    // 🔹 ONLY CHANGE IS HERE 👇
+    const { fcmToken } = req.body;   // ✅ was: token
+    const contactId = req.user.contactId;
 
-    if (!token) {
+    if (!fcmToken) {
       return res.status(400).json({ message: 'Token missing' });
     }
 
@@ -22,7 +23,7 @@ router.post('/', auth, async (req, res) => {
 
     await conn.sobject('Contact').update({
       Id: contactId,
-      FCM_Token__c: token,
+      FCM_Token__c: fcmToken,        // ✅ same variable
     });
 
     console.log('✅ TOKEN SAVED TO CONTACT =>', contactId);
