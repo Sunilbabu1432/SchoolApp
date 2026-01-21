@@ -13,6 +13,11 @@ app.use('/students', require('./routes/students'));
 app.use('/save-token', require('./routes/saveToken'));
 app.use('/cases', require('./routes/cases'));
 
+app.use('/teachers', require('./routes/teachers'));
+
+
+
+
 // Root check
 app.get('/', (req, res) => {
   res.send('Backend running');
