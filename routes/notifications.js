@@ -4,12 +4,13 @@ const auth = require('../middleware/auth');
 const salesforceLogin = require('../config/salesforce');
 const { sendPush } = require('../services/pushService');
 
-router.post('/notifications/manager-to-teachers', auth, async (req, res) => {
+// ✅ CORRECT
+router.post('/manager-to-teachers', auth, async (req, res) => {
   try {
     const { teacherIds, message } = req.body;
 
-    if (!teacherIds || !teacherIds.length) {
-      return res.status(400).json({ message: 'No teachers selected' });
+    if (!teacherIds?.length || !message) {
+      return res.status(400).json({ message: 'Invalid payload' });
     }
 
     const conn = await salesforceLogin();
@@ -20,30 +21,22 @@ router.post('/notifications/manager-to-teachers', auth, async (req, res) => {
       WHERE Id IN ('${teacherIds.join("','")}')
     `);
 
-    const teachers = result.records.filter(t => t.FCM_Token__c);
+    const tokens = result.records
+      .map(r => r.FCM_Token__c)
+      .filter(Boolean);
 
-    if (!teachers.length) {
-      return res
-        .status(400)
-        .json({ message: 'No valid FCM tokens found' });
-    }
+    console.log('TOKENS FOUND =>', tokens);
 
-    // 🔔 SEND PUSH ONE BY ONE (SAFE)
-    for (const teacher of teachers) {
-      await sendPush(
-        teacher.FCM_Token__c,
-        'Message from Manager',
-        message,
-        {
-          type: 'INFO',
-        }
-      );
+    for (const token of tokens) {
+      await sendPush(token, 'Message from Manager', message, {
+        type: 'INFO',
+      });
     }
 
     res.json({ success: true });
   } catch (err) {
-    console.error('❌ SEND NOTIFICATION ERROR =>', err.message);
-    res.status(500).json({ message: 'Failed to send notification' });
+    console.error('❌ PUSH ERROR =>', err.message);
+    res.status(500).json({ message: 'Push failed' });
   }
 });
 
