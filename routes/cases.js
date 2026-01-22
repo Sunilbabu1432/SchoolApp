@@ -111,4 +111,44 @@ const caseNumber = caseInfo.records[0]?.CaseNumber;
   }
 });
 
+// 🔹 MANAGER – GET CASE DETAILS
+router.get('/:id', auth, async (req, res) => {
+  try {
+    const conn = await salesforceLogin();
+
+    const result = await conn.query(`
+      SELECT 
+        Id,
+        CaseNumber,
+        Subject,
+        Description,
+        Status,
+        Account.Name
+      FROM Case
+      WHERE Id = '${req.params.id}'
+      LIMIT 1
+    `);
+
+    if (!result.records.length) {
+      return res.status(404).json({ message: 'Complaint not found' });
+    }
+
+    const c = result.records[0];
+
+    // ✅ IMPORTANT: frontend expect chesedhi ee structure
+    res.json({
+      caseId: c.CaseNumber,          // display ki
+      subject: c.Subject || '',
+      description: c.Description || '',
+      status: c.Status,
+      studentName: c.Account?.Name || '',
+    });
+
+  } catch (err) {
+    console.error('❌ GET CASE ERROR =>', err.message);
+    res.status(500).json({ message: 'Failed to load complaint' });
+  }
+});
+
+
 module.exports = router;
