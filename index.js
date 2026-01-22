@@ -19,6 +19,10 @@ app.use('/cases', require('./routes/cases'));
 app.use('/teachers', require('./routes/teachers'));
 
 
+const notificationRoutes = require('./routes/notificationRoutes');
+
+// 👇 MUST
+app.use('/', notificationRoutes);
 
 
 
