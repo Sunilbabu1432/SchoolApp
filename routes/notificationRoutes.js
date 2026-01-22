@@ -22,7 +22,7 @@ router.post('/manager-to-teachers', auth, async (req, res) => {
 
     const tokens = result.records
       .map(r => r.FCM_Token__c)
-      .filter(Boolean);
+      .filter(t => t && t.length >20); // Remove null/undefined
 
     console.log('TOKENS FOUND =>', tokens);
 

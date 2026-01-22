@@ -30,6 +30,17 @@ router.post('/', auth, async (req, res) => {
 
     console.log('✅ CASE CREATED =>', caseResult.id);
 
+    // 🔹 Fetch CaseNumber (VERY IMPORTANT)
+const caseInfo = await conn.query(`
+  SELECT Id, CaseNumber
+  FROM Case
+  WHERE Id = '${caseResult.id}'
+  LIMIT 1
+`);
+
+const caseNumber = caseInfo.records[0]?.CaseNumber;
+
+
     // 2️⃣ Fetch Student Account + Manager lookup
     const accRes = await conn.query(`
       SELECT Id, Name, Manager__c
@@ -72,23 +83,27 @@ router.post('/', auth, async (req, res) => {
     }
 
     // 4️⃣ Send Push
-    await sendPush(
-      manager.FCM_Token__c,
-      'New Student Complaint',
-      subject,
-      {
-        type: 'CASE',
-        caseId: caseResult.id,
-        studentName: student.Name,
-      }
-    );
+   await sendPush(
+  manager.FCM_Token__c,
+  'New Student Complaint',
+  subject,
+  {
+    type: 'CASE',
+    caseId: caseResult.id,      // backend fetch ki
+    caseNumber: caseNumber,     // UI display ki
+    studentName: student.Name,
+  }
+);
+
 
     console.log('✅ PUSH SENT TO MANAGER');
 
     res.json({
-      success: true,
-      caseId: caseResult.id,
-    });
+  success: true,
+  caseId: caseResult.id,
+  caseNumber,
+});
+
 
   } catch (err) {
     console.error('❌ CASE ERROR =>', err.message);
