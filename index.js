@@ -9,14 +9,13 @@ app.use(express.json());
 
 require('./firebase/firebaseAdmin');
 
-// Routes
 app.use('/auth', require('./routes/authRoutes'));
 app.use('/students', require('./routes/students'));
 app.use('/save-token', require('./routes/saveToken'));
 app.use('/cases', require('./routes/cases'));
 app.use('/teachers', require('./routes/teachers'));
 
-// ✅ THIS MUST MATCH FILE NAME EXACTLY
+// 🔥 THIS FILE MUST EXIST
 app.use('/notifications', require('./routes/notificationRoutes'));
 
 app.get('/health', (req, res) => {

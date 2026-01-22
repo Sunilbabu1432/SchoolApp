@@ -15,7 +15,7 @@ router.post('/manager-to-teachers', auth, async (req, res) => {
     const conn = await salesforceLogin();
 
     const result = await conn.query(`
-      SELECT Id, FCM_Token__c
+      SELECT Id, Name, FCM_Token__c
       FROM Contact
       WHERE Id IN ('${teacherIds.join("','")}')
     `);
@@ -26,13 +26,19 @@ router.post('/manager-to-teachers', auth, async (req, res) => {
 
     console.log('TOKENS FOUND =>', tokens);
 
+    if (!tokens.length) {
+      return res.status(404).json({ message: 'No tokens found' });
+    }
+
     for (const token of tokens) {
-      await sendPush(token, 'Message from Manager', message);
+      await sendPush(token, 'Message from Manager', message, {
+        type: 'INFO',
+      });
     }
 
     res.json({ success: true });
   } catch (err) {
-    console.error(err);
+    console.error('❌ PUSH ERROR =>', err.message);
     res.status(500).json({ message: 'Push failed' });
   }
 });
