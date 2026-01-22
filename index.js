@@ -7,37 +7,30 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// 🔥 Firebase Admin Init
 require('./firebase/firebaseAdmin');
-
 
 // 🔐 Routes
 app.use('/auth', require('./routes/authRoutes'));
 app.use('/students', require('./routes/students'));
 app.use('/save-token', require('./routes/saveToken'));
 app.use('/cases', require('./routes/cases'));
-
 app.use('/teachers', require('./routes/teachers'));
 
-
+// 🔔 Notifications (🔥 IMPORTANT FIX)
 const notificationRoutes = require('./routes/notificationRoutes');
-
-// 👇 MUST
-app.use('/', notificationRoutes);
-
-
-
-
+app.use('/notifications', notificationRoutes); // ✅ FIXED
 
 // Root check
 app.get('/', (req, res) => {
   res.send('Backend running');
 });
 
-// ✅ Health check (ADD THIS)
+// ✅ Health check
 app.get('/health', (req, res) => {
   res.status(200).json({
     status: 'ok',
-    message: 'Server is healthy'
+    message: 'Server is healthy',
   });
 });
 
