@@ -7,31 +7,20 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// 🔥 Firebase Admin Init
 require('./firebase/firebaseAdmin');
 
-// 🔐 Routes
+// Routes
 app.use('/auth', require('./routes/authRoutes'));
 app.use('/students', require('./routes/students'));
 app.use('/save-token', require('./routes/saveToken'));
 app.use('/cases', require('./routes/cases'));
 app.use('/teachers', require('./routes/teachers'));
 
-// 🔔 Notifications (🔥 IMPORTANT FIX)
-const notificationRoutes = require('./routes/notificationRoutes');
-app.use('/notifications', notificationRoutes); // ✅ FIXED
+// ✅ THIS MUST MATCH FILE NAME EXACTLY
+app.use('/notifications', require('./routes/notificationRoutes'));
 
-// Root check
-app.get('/', (req, res) => {
-  res.send('Backend running');
-});
-
-// ✅ Health check
 app.get('/health', (req, res) => {
-  res.status(200).json({
-    status: 'ok',
-    message: 'Server is healthy',
-  });
+  res.json({ status: 'ok' });
 });
 
 const PORT = process.env.PORT || 5000;
