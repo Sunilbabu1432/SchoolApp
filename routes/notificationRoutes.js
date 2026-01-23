@@ -44,12 +44,5 @@ router.post('/manager-to-teachers', auth, async (req, res) => {
 });
 
 
-const cleanIds = teacherIds.map(id => id.trim());
-
-const result = await conn.query(`
-  SELECT Id, Name, FCM_Token__c
-  FROM Contact
-  WHERE Id IN ('${cleanIds.join("','")}')
-`);
 
 module.exports = router;
