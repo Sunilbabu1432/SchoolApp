@@ -10,14 +10,17 @@ const sendPush = async (token, title, body, data = {}) => {
     const message = {
       token,
       notification: {
-        title,
-        body,
+        title: title || 'Notification',   // 🔥 safety
+        body: body || '',                 // 🔥 safety
       },
       data: Object.fromEntries(
         Object.entries(data).map(([k, v]) => [k, String(v)])
       ),
       android: {
         priority: 'high',
+        notification: {
+          sound: 'default',
+        },
       },
     };
 
@@ -29,10 +32,10 @@ const sendPush = async (token, title, body, data = {}) => {
 
     // OPTIONAL (future cleanup)
     // if (err.code === 'messaging/registration-token-not-registered') {
-    //   👉 Salesforce lo FCM_Token__c clear cheyyachu
+    //   Salesforce lo FCM_Token__c clear cheyyachu
     // }
 
-    return false; // 🔥 VERY IMPORTANT
+    return false;
   }
 };
 
