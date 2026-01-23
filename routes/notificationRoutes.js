@@ -4,6 +4,9 @@ const auth = require('../middleware/auth');
 const salesforceLogin = require('../config/salesforce');
 const { sendPush } = require('../services/pushService');
 
+router.get('/teachers-by-class', notificationsController.getTeachersByClass);
+
+
 router.post('/manager-to-teachers', auth, async (req, res) => {
   try {
     const { teacherIds, message } = req.body;
