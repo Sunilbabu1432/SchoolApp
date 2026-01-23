@@ -15,8 +15,11 @@ app.use('/save-token', require('./routes/saveToken'));
 app.use('/cases', require('./routes/cases'));
 app.use('/teachers', require('./routes/teachers'));
 
-// 🔥 THIS FILE MUST EXIST
-app.use('/notifications', require('./routes/notificationRoutes'));
+
+const salesforceMiddleware = require('./middleware/salesforceMiddleware');
+
+app.use('/notifications', salesforceMiddleware, require('./routes/notificationRoutes'));
+
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
