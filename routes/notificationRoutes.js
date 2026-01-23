@@ -4,6 +4,7 @@ const auth = require('../middleware/auth');
 const salesforceLogin = require('../config/salesforce');
 const { sendPush } = require('../services/pushService');
 
+const notificationsController = require('../controllers/notificationsController');
 router.get('/teachers-by-class', notificationsController.getTeachersByClass);
 
 
