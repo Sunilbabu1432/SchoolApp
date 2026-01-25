@@ -20,6 +20,9 @@ const salesforceMiddleware = require('./middleware/salesforceMiddleware');
 
 app.use('/notifications', salesforceMiddleware, require('./routes/notificationRoutes'));
 
+app.use('/marks', require('./routes/marks'));
+
+
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
