@@ -34,16 +34,18 @@ router.post('/', auth, async (req, res) => {
     const conn = await salesforceLogin();
 
     // 1️⃣ Create Student_Mark__c record
-    const markResult = await conn.sobject('Student_Mark__c').create({
-      Student__c: studentId,
-      Class__c: className,
-      Subject__c: subject,
-      Exam_Type__c: examType,
-      Marks__c: Number(marks),
-      Max_Marks__c: Number(maxMarks),
-      Teacher__c: req.user.contactId, // from JWT
-      Status__c: 'Submitted',
-    });
+   const markResult = await conn
+  .sobject('Student_Mark__c')
+  .create({
+    Student__c: studentId,
+    Class__c: className,
+    Subject__c: subject,
+    Exam_Type__c: examType,
+    Marks__c: Number(marks),
+    Max_Marks__c: Number(maxMarks),
+    Status__c: 'Submitted',
+  });
+
 
     console.log('✅ MARK CREATED =>', markResult.id);
 
