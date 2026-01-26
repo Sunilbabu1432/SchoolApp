@@ -94,7 +94,7 @@ router.post('/', auth, async (req, res) => {
       `${student.Name} - ${subject} (${examType})`,
       {
         type: 'MARKS',
-        studentId: student.Id,
+        markId: markResult.id,
         subject,
         examType,
         className,
@@ -108,6 +108,51 @@ router.post('/', auth, async (req, res) => {
   } catch (err) {
     console.error('❌ MARK SUBMIT ERROR =>', err.message);
     res.status(500).json({ message: 'Failed to submit marks' });
+  }
+});
+/**
+ * ================================
+ * MANAGER – GET MARK DETAILS
+ * ================================
+ */
+router.get('/:id', auth, async (req, res) => {
+  try {
+    const conn = await salesforceLogin();
+
+    const result = await conn.query(`
+      SELECT
+        Id,
+        Student__r.Name,
+        Class__c,
+        Subject__c,
+        Exam_Type__c,
+        Marks__c,
+        Max_Marks__c,
+        Status__c
+      FROM Student_Mark__c
+      WHERE Id = '${req.params.id}'
+      LIMIT 1
+    `);
+
+    if (!result.records.length) {
+      return res.status(404).json({ message: 'Marks not found' });
+    }
+
+    const m = result.records[0];
+
+    res.json({
+      studentName: m.Student__r.Name,
+      className: m.Class__c,
+      subject: m.Subject__c,
+      examType: m.Exam_Type__c,
+      marks: m.Marks__c,
+      maxMarks: m.Max_Marks__c,
+      status: m.Status__c,
+    });
+
+  } catch (err) {
+    console.error('❌ GET MARK ERROR =>', err.message);
+    res.status(500).json({ message: 'Failed to load marks' });
   }
 });
 
