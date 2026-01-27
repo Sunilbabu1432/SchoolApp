@@ -43,6 +43,8 @@ router.post('/', auth, async (req, res) => {
       Marks__c: Number(marks),
       Max_Marks__c: Number(maxMarks),
       Status__c: 'Submitted',
+
+      Teacher__c: req.user.contactId, // ✅ THIS IS THE FIX
     });
 
     console.log('✅ MARK CREATED =>', markResult.id);
