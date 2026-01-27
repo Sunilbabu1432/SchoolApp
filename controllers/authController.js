@@ -10,8 +10,9 @@ exports.login = async (req, res) => {
 
     const conn = await salesforceLogin();
 
+    // 🔹 Parent ki AccountId kavali kabatti include chesam
     const result = await conn.query(`
-      SELECT Id, Name, Type__c, MobilePhone
+      SELECT Id, Name, Type__c, MobilePhone, AccountId
       FROM Contact
       WHERE MobilePhone = '${mobile}'
       LIMIT 1
@@ -23,8 +24,19 @@ exports.login = async (req, res) => {
 
     const user = result.records[0];
 
+    // 🔐 JWT payload
+    const payload = {
+      contactId: user.Id,
+      role: user.Type__c,
+    };
+
+    // 🔹 ONLY FOR PARENT – studentAccountId add
+    if (user.Type__c === 'Parent') {
+      payload.studentAccountId = user.AccountId;
+    }
+
     const token = jwt.sign(
-      { contactId: user.Id, role: user.Type__c },
+      payload,
       process.env.JWT_SECRET,
       { expiresIn: '1d' }
     );
@@ -34,7 +46,12 @@ exports.login = async (req, res) => {
       contactId: user.Id,
       role: user.Type__c,
       name: user.Name,
+
+      // 🔹 frontend ki easy ga kavali antey
+      studentAccountId:
+        user.Type__c === 'Parent' ? user.AccountId : null,
     });
+
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: err.message });
