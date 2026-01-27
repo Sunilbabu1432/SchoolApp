@@ -33,6 +33,7 @@ router.post('/', auth, async (req, res) => {
 
     const conn = await salesforceLogin();
 
+    // 1️⃣ CREATE MARK
     const markResult = await conn.sobject('Student_Mark__c').create({
       Student__c: studentId,
       Class__c: String(className),
@@ -44,8 +45,12 @@ router.post('/', auth, async (req, res) => {
       Teacher__c: req.user.contactId,
     });
 
+    // 2️⃣ FETCH STUDENT + MANAGER
     const accRes = await conn.query(
-      `SELECT Id, Name, Manager__c FROM Account WHERE Id = '${studentId}' LIMIT 1`
+      `SELECT Id, Name, Manager__c
+       FROM Account
+       WHERE Id = '${studentId}'
+       LIMIT 1`
     );
 
     if (!accRes.records.length || !accRes.records[0].Manager__c) {
@@ -54,8 +59,12 @@ router.post('/', auth, async (req, res) => {
 
     const student = accRes.records[0];
 
+    // 3️⃣ FETCH MANAGER TOKEN
     const mgrRes = await conn.query(
-      `SELECT Id, FCM_Token__c FROM Contact WHERE Id = '${student.Manager__c}' LIMIT 1`
+      `SELECT Id, FCM_Token__c
+       FROM Contact
+       WHERE Id = '${student.Manager__c}'
+       LIMIT 1`
     );
 
     if (mgrRes.records.length && mgrRes.records[0].FCM_Token__c) {
@@ -85,10 +94,17 @@ router.get('/:id', auth, async (req, res) => {
     const conn = await salesforceLogin();
 
     const result = await conn.query(
-      `SELECT Id, Student__r.Name, Class__c, Subject__c,
-              Exam_Type__c, Marks__c, Max_Marks__c, Status__c
+      `SELECT Id,
+              Student__r.Name,
+              Class__c,
+              Subject__c,
+              Exam_Type__c,
+              Marks__c,
+              Max_Marks__c,
+              Status__c
        FROM Student_Mark__c
-       WHERE Id = '${req.params.id}' LIMIT 1`
+       WHERE Id = '${req.params.id}'
+       LIMIT 1`
     );
 
     if (!result.records.length) {
@@ -120,6 +136,7 @@ router.get('/:id', auth, async (req, res) => {
  */
 router.post('/publish', auth, async (req, res) => {
   try {
+    // 🔐 Only Manager
     if (req.user.role !== 'Manager') {
       return res.status(403).json({ message: 'Access denied' });
     }
@@ -131,7 +148,7 @@ router.post('/publish', auth, async (req, res) => {
 
     const conn = await salesforceLogin();
 
-    // 1️⃣ Get submitted marks
+    // 1️⃣ FETCH SUBMITTED MARKS
     const marksRes = await conn.query(
       `SELECT Id, Student__c
        FROM Student_Mark__c
@@ -144,31 +161,41 @@ router.post('/publish', auth, async (req, res) => {
       return res.json({ success: true, message: 'No marks to publish' });
     }
 
-    // 2️⃣ Bulk update
+    // 2️⃣ BULK UPDATE → Published
     await conn.sobject('Student_Mark__c').update(
-      marksRes.records.map(m => ({ Id: m.Id, Status__c: 'Published' }))
+      marksRes.records.map(m => ({
+        Id: m.Id,
+        Status__c: 'Published',
+      }))
     );
 
-    // 3️⃣ Collect parent tokens
-    const studentIds = marksRes.records.map(r => `'${r.Student__c}'`).join(',');
+    // 3️⃣ FETCH PARENTS FROM CONTACT (✅ FIXED PART)
+    const studentIds = marksRes.records
+      .map(r => `'${r.Student__c}'`)
+      .join(',');
+
     const parentsRes = await conn.query(
-      `SELECT Parent__r.FCM_Token__c
-       FROM Account
-       WHERE Id IN (${studentIds})
-         AND Parent__r.FCM_Token__c != null`
+      `SELECT FCM_Token__c
+       FROM Contact
+       WHERE AccountId IN (${studentIds})
+         AND FCM_Token__c != null`
     );
 
     const tokens = parentsRes.records
-      .map(r => r.Parent__r?.FCM_Token__c)
+      .map(r => r.FCM_Token__c)
       .filter(Boolean);
 
-    // 4️⃣ Send bulk push
+    // 4️⃣ SEND BULK PUSH
     if (tokens.length) {
       await sendPushBulk(
         tokens,
         '📢 Exam Results Published',
         `${examType} results published for ${className}`,
-        { type: 'RESULT_PUBLISHED', examType, className }
+        {
+          type: 'RESULT_PUBLISHED',
+          examType,
+          className,
+        }
       );
     }
 
