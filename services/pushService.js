@@ -10,17 +10,14 @@ const sendPush = async (token, title, body, data = {}) => {
     const message = {
       token,
       notification: {
-        title: title || 'Notification',   // 🔥 safety
-        body: body || '',                 // 🔥 safety
+        title,
+        body,
       },
       data: Object.fromEntries(
         Object.entries(data).map(([k, v]) => [k, String(v)])
       ),
       android: {
         priority: 'high',
-        notification: {
-          sound: 'default',
-        },
       },
     };
 
@@ -32,11 +29,28 @@ const sendPush = async (token, title, body, data = {}) => {
 
     // OPTIONAL (future cleanup)
     // if (err.code === 'messaging/registration-token-not-registered') {
-    //   Salesforce lo FCM_Token__c clear cheyyachu
+    //   👉 Salesforce lo FCM_Token__c clear cheyyachu
     // }
 
-    return false;
+    return false; // 🔥 VERY IMPORTANT
+  }
+};
+const sendPushBulk = async (tokens, title, body, data = {}) => {
+  const BATCH_SIZE = 500;
+
+  for (let i = 0; i < tokens.length; i += BATCH_SIZE) {
+    const batch = tokens.slice(i, i + BATCH_SIZE);
+
+    await admin.messaging().sendEachForMulticast({
+      tokens: batch,
+      notification: { title, body },
+      data: Object.fromEntries(
+        Object.entries(data).map(([k, v]) => [k, String(v)])
+      ),
+      android: { priority: 'high' },
+    });
   }
 };
 
-module.exports = { sendPush };
+
+module.exports = { sendPush, sendPushBulk };

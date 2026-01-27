@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const auth = require('../middleware/auth');
 const salesforceLogin = require('../config/salesforce');
-const { sendPush } = require('../services/pushService');
+const { sendPush, sendPushBulk } = require('../services/pushService');
 
 /**
  * =====================================
@@ -20,7 +20,6 @@ router.post('/', auth, async (req, res) => {
       maxMarks,
     } = req.body;
 
-    // ✅ SAFE VALIDATION
     if (
       !studentId ||
       !className ||
@@ -34,7 +33,6 @@ router.post('/', auth, async (req, res) => {
 
     const conn = await salesforceLogin();
 
-    // 1️⃣ CREATE MARK
     const markResult = await conn.sobject('Student_Mark__c').create({
       Student__c: studentId,
       Class__c: String(className),
@@ -43,13 +41,9 @@ router.post('/', auth, async (req, res) => {
       Marks__c: Number(marks),
       Max_Marks__c: Number(maxMarks),
       Status__c: 'Submitted',
-
-      Teacher__c: req.user.contactId, // ✅ THIS IS THE FIX
+      Teacher__c: req.user.contactId,
     });
 
-    console.log('✅ MARK CREATED =>', markResult.id);
-
-    // 2️⃣ FETCH STUDENT + MANAGER
     const accRes = await conn.query(
       `SELECT Id, Name, Manager__c FROM Account WHERE Id = '${studentId}' LIMIT 1`
     );
@@ -60,34 +54,20 @@ router.post('/', auth, async (req, res) => {
 
     const student = accRes.records[0];
 
-    // 3️⃣ FETCH MANAGER TOKEN
     const mgrRes = await conn.query(
-      `SELECT Id, Name, FCM_Token__c FROM Contact WHERE Id = '${student.Manager__c}' LIMIT 1`
+      `SELECT Id, FCM_Token__c FROM Contact WHERE Id = '${student.Manager__c}' LIMIT 1`
     );
 
-    if (!mgrRes.records.length || !mgrRes.records[0].FCM_Token__c) {
-      return res.json({ success: true, markId: markResult.id });
+    if (mgrRes.records.length && mgrRes.records[0].FCM_Token__c) {
+      await sendPush(
+        mgrRes.records[0].FCM_Token__c,
+        'Marks Submitted',
+        `${student.Name} - ${subject} (${examType})`,
+        { type: 'MARKS', markId: markResult.id }
+      );
     }
 
-    const manager = mgrRes.records[0];
-
-    // 4️⃣ SEND PUSH
-    await sendPush(
-      manager.FCM_Token__c,
-      'Marks Submitted',
-      `${student.Name} - ${subject} (${examType})`,
-      {
-        type: 'MARKS',
-        markId: markResult.id,
-      }
-    );
-
-    console.log('✅ MARK PUSH SENT');
-
-    res.json({
-      success: true,
-      markId: markResult.id,
-    });
+    res.json({ success: true, markId: markResult.id });
 
   } catch (err) {
     console.error('❌ MARK SUBMIT ERROR =>', err.message);
@@ -103,21 +83,12 @@ router.post('/', auth, async (req, res) => {
 router.get('/:id', auth, async (req, res) => {
   try {
     const conn = await salesforceLogin();
-    const markId = req.params.id;
 
     const result = await conn.query(
-      `SELECT
-        Id,
-        Student__r.Name,
-        Class__c,
-        Subject__c,
-        Exam_Type__c,
-        Marks__c,
-        Max_Marks__c,
-        Status__c
-      FROM Student_Mark__c
-      WHERE Id = '${markId}'
-      LIMIT 1`
+      `SELECT Id, Student__r.Name, Class__c, Subject__c,
+              Exam_Type__c, Marks__c, Max_Marks__c, Status__c
+       FROM Student_Mark__c
+       WHERE Id = '${req.params.id}' LIMIT 1`
     );
 
     if (!result.records.length) {
@@ -139,6 +110,77 @@ router.get('/:id', auth, async (req, res) => {
   } catch (err) {
     console.error('❌ GET MARK ERROR =>', err.message);
     res.status(500).json({ message: 'Failed to load marks' });
+  }
+});
+
+/**
+ * =====================================
+ * MANAGER → PUBLISH RESULTS (CLASS-WISE)
+ * =====================================
+ */
+router.post('/publish', auth, async (req, res) => {
+  try {
+    if (req.user.role !== 'Manager') {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    const { examType, className } = req.body;
+    if (!examType || !className) {
+      return res.status(400).json({ message: 'Missing examType or className' });
+    }
+
+    const conn = await salesforceLogin();
+
+    // 1️⃣ Get submitted marks
+    const marksRes = await conn.query(
+      `SELECT Id, Student__c
+       FROM Student_Mark__c
+       WHERE Exam_Type__c = '${examType}'
+         AND Class__c = '${className}'
+         AND Status__c = 'Submitted'`
+    );
+
+    if (!marksRes.records.length) {
+      return res.json({ success: true, message: 'No marks to publish' });
+    }
+
+    // 2️⃣ Bulk update
+    await conn.sobject('Student_Mark__c').update(
+      marksRes.records.map(m => ({ Id: m.Id, Status__c: 'Published' }))
+    );
+
+    // 3️⃣ Collect parent tokens
+    const studentIds = marksRes.records.map(r => `'${r.Student__c}'`).join(',');
+    const parentsRes = await conn.query(
+      `SELECT Parent__r.FCM_Token__c
+       FROM Account
+       WHERE Id IN (${studentIds})
+         AND Parent__r.FCM_Token__c != null`
+    );
+
+    const tokens = parentsRes.records
+      .map(r => r.Parent__r?.FCM_Token__c)
+      .filter(Boolean);
+
+    // 4️⃣ Send bulk push
+    if (tokens.length) {
+      await sendPushBulk(
+        tokens,
+        '📢 Exam Results Published',
+        `${examType} results published for ${className}`,
+        { type: 'RESULT_PUBLISHED', examType, className }
+      );
+    }
+
+    res.json({
+      success: true,
+      publishedCount: marksRes.records.length,
+      notifiedParents: tokens.length,
+    });
+
+  } catch (err) {
+    console.error('❌ PUBLISH ERROR =>', err.message);
+    res.status(500).json({ message: 'Failed to publish results' });
   }
 });
 
