@@ -7,12 +7,23 @@ router.get('/', auth, async (req, res) => {
   try {
     const conn = await salesforceLogin();
 
-    const result = await conn.query(`
+    const className = req.query.class; // 🔑 optional
+
+    // ✅ BASE QUERY (same as before)
+    let query = `
       SELECT Id, Name
       FROM Account
       WHERE Type = 'Student'
-      LIMIT 50
-    `);
+    `;
+
+    // ✅ ONLY ADD FILTER IF CLASS IS SENT
+    if (className) {
+      query += ` AND Class__c = '${className}'`;
+    }
+
+    query += ' LIMIT 50';
+
+    const result = await conn.query(query);
 
     res.json({
       success: true,
