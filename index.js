@@ -22,6 +22,9 @@ app.use('/notifications', salesforceMiddleware, require('./routes/notificationRo
 
 app.use('/marks', require('./routes/marks'));
 
+app.use('/mark-action', require('./routes/markAction'));
+
+
 
 
 app.get('/health', (req, res) => {
