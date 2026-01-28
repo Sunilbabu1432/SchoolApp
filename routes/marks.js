@@ -20,6 +20,7 @@ router.post('/', auth, async (req, res) => {
 
     const conn = await salesforceLogin();
 
+    // 1️⃣ CREATE MARK
     const markResult = await conn.sobject('Student_Mark__c').create({
       Student__c: studentId,
       Class__c: className,
@@ -31,29 +32,40 @@ router.post('/', auth, async (req, res) => {
       Teacher__c: req.user.contactId,
     });
 
-    // Notify Manager
-    const accRes = await conn.query(`
-      SELECT Name, Manager__c
-      FROM Account
-      WHERE Id = '${studentId}'
-      LIMIT 1
+    // 2️⃣ CHECK → FIRST SUBJECT FOR THIS EXAM?
+    const existingMarks = await conn.query(`
+      SELECT Id
+      FROM Student_Mark__c
+      WHERE Student__c = '${studentId}'
+        AND Exam_Type__c = '${examType}'
+        AND Status__c = 'Submitted'
     `);
 
-    if (accRes.records.length && accRes.records[0].Manager__c) {
-      const mgrRes = await conn.query(`
-        SELECT FCM_Token__c
-        FROM Contact
-        WHERE Id = '${accRes.records[0].Manager__c}'
+    // 👉 ONLY FIRST SUBJECT triggers notification
+    if (existingMarks.records.length === 1) {
+      const accRes = await conn.query(`
+        SELECT Name, Manager__c
+        FROM Account
+        WHERE Id = '${studentId}'
         LIMIT 1
       `);
 
-      if (mgrRes.records.length && mgrRes.records[0].FCM_Token__c) {
-        await sendPush(
-          mgrRes.records[0].FCM_Token__c,
-          'Marks Submitted',
-          `${accRes.records[0].Name} - ${subject} (${examType})`,
-          { type: 'MARKS' }
-        );
+      if (accRes.records.length && accRes.records[0].Manager__c) {
+        const mgrRes = await conn.query(`
+          SELECT FCM_Token__c
+          FROM Contact
+          WHERE Id = '${accRes.records[0].Manager__c}'
+          LIMIT 1
+        `);
+
+        if (mgrRes.records.length && mgrRes.records[0].FCM_Token__c) {
+          await sendPush(
+            mgrRes.records[0].FCM_Token__c,
+            'Marks Submitted',
+            `${accRes.records[0].Name} - ${examType} marks submitted`,
+            { type: 'MARKS_READY', examType }
+          );
+        }
       }
     }
 
@@ -83,7 +95,6 @@ router.get('/parent/results', auth, async (req, res) => {
 
     const conn = await salesforceLogin();
 
-    // Student Name
     const studentRes = await conn.query(`
       SELECT Name
       FROM Account
@@ -91,9 +102,6 @@ router.get('/parent/results', auth, async (req, res) => {
       LIMIT 1
     `);
 
-    const studentName = studentRes.records[0]?.Name || '';
-
-    // Exam-wise marks (RAW – frontend handles grouping)
     const marksRes = await conn.query(`
       SELECT Id,
              Subject__c,
@@ -109,7 +117,7 @@ router.get('/parent/results', auth, async (req, res) => {
 
     res.json({
       success: true,
-      studentName,
+      studentName: studentRes.records[0]?.Name || '',
       results: marksRes.records,
     });
 
@@ -171,7 +179,6 @@ router.post('/publish', auth, async (req, res) => {
 
     const conn = await salesforceLogin();
 
-    // Fetch submitted marks (ONLY this exam)
     const marksRes = await conn.query(`
       SELECT Id, Student__c
       FROM Student_Mark__c
@@ -184,15 +191,10 @@ router.post('/publish', auth, async (req, res) => {
       return res.json({ success: true, message: 'No marks to publish' });
     }
 
-    // Update → Published
     await conn.sobject('Student_Mark__c').update(
-      marksRes.records.map(r => ({
-        Id: r.Id,
-        Status__c: 'Published',
-      }))
+      marksRes.records.map(r => ({ Id: r.Id, Status__c: 'Published' }))
     );
 
-    // Parent tokens via AccountId
     const studentIds = [...new Set(marksRes.records.map(r => r.Student__c))];
 
     const parentsRes = await conn.query(`
