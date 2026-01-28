@@ -11,14 +11,7 @@ const { sendPush, sendPushBulk } = require('../services/pushService');
  */
 router.post('/', auth, async (req, res) => {
   try {
-    const {
-      studentId,
-      className,
-      subject,
-      examType,
-      marks,
-      maxMarks,
-    } = req.body;
+    const { studentId, className, subject, examType, marks, maxMarks } = req.body;
 
     if (
       !studentId ||
@@ -33,19 +26,17 @@ router.post('/', auth, async (req, res) => {
 
     const conn = await salesforceLogin();
 
-    // 1️⃣ CREATE MARK
     const markResult = await conn.sobject('Student_Mark__c').create({
       Student__c: studentId,
-      Class__c: String(className),
-      Subject__c: String(subject),
-      Exam_Type__c: String(examType),
+      Class__c: className,
+      Subject__c: subject,
+      Exam_Type__c: examType,
       Marks__c: Number(marks),
       Max_Marks__c: Number(maxMarks),
       Status__c: 'Submitted',
       Teacher__c: req.user.contactId,
     });
 
-    // 2️⃣ FETCH STUDENT + MANAGER
     const accRes = await conn.query(
       `SELECT Id, Name, Manager__c
        FROM Account
@@ -59,9 +50,8 @@ router.post('/', auth, async (req, res) => {
 
     const student = accRes.records[0];
 
-    // 3️⃣ FETCH MANAGER TOKEN
     const mgrRes = await conn.query(
-      `SELECT Id, FCM_Token__c
+      `SELECT FCM_Token__c
        FROM Contact
        WHERE Id = '${student.Manager__c}'
        LIMIT 1`
@@ -86,6 +76,45 @@ router.post('/', auth, async (req, res) => {
 
 /**
  * =====================================
+ * PARENT → VIEW PUBLISHED RESULTS
+ * ⚠️ MUST BE ABOVE :id ROUTE
+ * =====================================
+ */
+router.get('/parent/results', auth, async (req, res) => {
+  try {
+    if (req.user.role !== 'Parent') {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    const studentAccountId = req.user.studentAccountId;
+    if (!studentAccountId) {
+      return res.status(400).json({ message: 'Student not linked' });
+    }
+
+    const conn = await salesforceLogin();
+
+    const result = await conn.query(`
+      SELECT Subject__c,
+             Exam_Type__c,
+             Marks__c,
+             Max_Marks__c,
+             Class__c
+      FROM Student_Mark__c
+      WHERE Student__c = '${studentAccountId}'
+        AND Status__c = 'Published'
+      ORDER BY Exam_Type__c
+    `);
+
+    res.json({ success: true, results: result.records });
+
+  } catch (err) {
+    console.error('❌ PARENT RESULTS ERROR =>', err.message);
+    res.status(500).json({ message: 'Failed to load results' });
+  }
+});
+
+/**
+ * =====================================
  * MANAGER → GET MARK DETAILS
  * =====================================
  */
@@ -94,8 +123,7 @@ router.get('/:id', auth, async (req, res) => {
     const conn = await salesforceLogin();
 
     const result = await conn.query(
-      `SELECT Id,
-              Student__r.Name,
+      `SELECT Student__r.Name,
               Class__c,
               Subject__c,
               Exam_Type__c,
@@ -111,17 +139,7 @@ router.get('/:id', auth, async (req, res) => {
       return res.status(404).json({ message: 'Marks not found' });
     }
 
-    const m = result.records[0];
-
-    res.json({
-      studentName: m.Student__r?.Name || '',
-      className: m.Class__c,
-      subject: m.Subject__c,
-      examType: m.Exam_Type__c,
-      marks: m.Marks__c,
-      maxMarks: m.Max_Marks__c,
-      status: m.Status__c,
-    });
+    res.json(result.records[0]);
 
   } catch (err) {
     console.error('❌ GET MARK ERROR =>', err.message);
@@ -136,7 +154,6 @@ router.get('/:id', auth, async (req, res) => {
  */
 router.post('/publish', auth, async (req, res) => {
   try {
-    // 🔐 Only Manager
     if (req.user.role !== 'Manager') {
       return res.status(403).json({ message: 'Access denied' });
     }
@@ -148,7 +165,6 @@ router.post('/publish', auth, async (req, res) => {
 
     const conn = await salesforceLogin();
 
-    // 1️⃣ FETCH SUBMITTED MARKS
     const marksRes = await conn.query(
       `SELECT Id, Student__c
        FROM Student_Mark__c
@@ -161,41 +177,37 @@ router.post('/publish', auth, async (req, res) => {
       return res.json({ success: true, message: 'No marks to publish' });
     }
 
-    // 2️⃣ BULK UPDATE → Published
     await conn.sobject('Student_Mark__c').update(
-      marksRes.records.map(m => ({
-        Id: m.Id,
-        Status__c: 'Published',
-      }))
+      marksRes.records.map(r => ({ Id: r.Id, Status__c: 'Published' }))
     );
 
-    // 3️⃣ FETCH PARENTS FROM CONTACT (✅ FIXED PART)
     const studentIds = marksRes.records
-      .map(r => `'${r.Student__c}'`)
-      .join(',');
+      .map(r => r.Student__c)
+      .filter(Boolean);
+
+    if (!studentIds.length) {
+      return res.json({
+        success: true,
+        publishedCount: marksRes.records.length,
+        notifiedParents: 0,
+      });
+    }
 
     const parentsRes = await conn.query(
       `SELECT FCM_Token__c
        FROM Contact
-       WHERE AccountId IN (${studentIds})
+       WHERE AccountId IN (${studentIds.map(id => `'${id}'`).join(',')})
          AND FCM_Token__c != null`
     );
 
-    const tokens = parentsRes.records
-      .map(r => r.FCM_Token__c)
-      .filter(Boolean);
+    const tokens = parentsRes.records.map(r => r.FCM_Token__c);
 
-    // 4️⃣ SEND BULK PUSH
     if (tokens.length) {
       await sendPushBulk(
         tokens,
         '📢 Exam Results Published',
         `${examType} results published for ${className}`,
-        {
-          type: 'RESULT_PUBLISHED',
-          examType,
-          className,
-        }
+        { type: 'RESULT_PUBLISHED', examType, className }
       );
     }
 
