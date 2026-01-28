@@ -203,11 +203,11 @@ router.post('/publish', auth, async (req, res) => {
     }
 
     const parentsRes = await conn.query(
-      `SELECT FCM_Token__c
-       FROM Contact
-       WHERE Student_Account__c IN (${studentIds.map(id => `'${id}'`).join(',')})
-         AND FCM_Token__c != null`
-    );
+  `SELECT FCM_Token__c
+   FROM Contact
+   WHERE AccountId IN (${studentIds.map(id => `'${id}'`).join(',')})
+     AND FCM_Token__c != null`
+);
 
     const tokens = parentsRes.records
       .map(r => r.FCM_Token__c)
