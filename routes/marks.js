@@ -13,20 +13,13 @@ router.post('/', auth, async (req, res) => {
   try {
     const { studentId, className, subject, examType, marks, maxMarks } = req.body;
 
-    if (
-      !studentId ||
-      !className ||
-      !subject ||
-      !examType ||
-      marks === undefined ||
-      maxMarks === undefined
-    ) {
+    if (!studentId || !className || !subject || !examType ||
+        marks === undefined || maxMarks === undefined) {
       return res.status(400).json({ message: 'Missing fields' });
     }
 
     const conn = await salesforceLogin();
 
-    // 1️⃣ CREATE MARK
     const markResult = await conn.sobject('Student_Mark__c').create({
       Student__c: studentId,
       Class__c: className,
@@ -38,35 +31,30 @@ router.post('/', auth, async (req, res) => {
       Teacher__c: req.user.contactId,
     });
 
-    // 2️⃣ FETCH STUDENT + MANAGER
-    const accRes = await conn.query(
-      `SELECT Id, Name, Manager__c
-       FROM Account
-       WHERE Id = '${studentId}'
-       LIMIT 1`
-    );
+    // Notify Manager
+    const accRes = await conn.query(`
+      SELECT Name, Manager__c
+      FROM Account
+      WHERE Id = '${studentId}'
+      LIMIT 1
+    `);
 
-    if (!accRes.records.length || !accRes.records[0].Manager__c) {
-      return res.json({ success: true, markId: markResult.id });
-    }
+    if (accRes.records.length && accRes.records[0].Manager__c) {
+      const mgrRes = await conn.query(`
+        SELECT FCM_Token__c
+        FROM Contact
+        WHERE Id = '${accRes.records[0].Manager__c}'
+        LIMIT 1
+      `);
 
-    const student = accRes.records[0];
-
-    // 3️⃣ FETCH MANAGER TOKEN
-    const mgrRes = await conn.query(
-      `SELECT FCM_Token__c
-       FROM Contact
-       WHERE Id = '${student.Manager__c}'
-       LIMIT 1`
-    );
-
-    if (mgrRes.records.length && mgrRes.records[0].FCM_Token__c) {
-      await sendPush(
-        mgrRes.records[0].FCM_Token__c,
-        'Marks Submitted',
-        `${student.Name} - ${subject} (${examType})`,
-        { type: 'MARKS', markId: markResult.id }
-      );
+      if (mgrRes.records.length && mgrRes.records[0].FCM_Token__c) {
+        await sendPush(
+          mgrRes.records[0].FCM_Token__c,
+          'Marks Submitted',
+          `${accRes.records[0].Name} - ${subject} (${examType})`,
+          { type: 'MARKS' }
+        );
+      }
     }
 
     res.json({ success: true, markId: markResult.id });
@@ -80,7 +68,6 @@ router.post('/', auth, async (req, res) => {
 /**
  * =====================================
  * PARENT → VIEW PUBLISHED RESULTS
- * ⚠️ MUST BE ABOVE :id ROUTE
  * =====================================
  */
 router.get('/parent/results', auth, async (req, res) => {
@@ -96,8 +83,20 @@ router.get('/parent/results', auth, async (req, res) => {
 
     const conn = await salesforceLogin();
 
-    const result = await conn.query(`
-      SELECT Subject__c,
+    // Student Name
+    const studentRes = await conn.query(`
+      SELECT Name
+      FROM Account
+      WHERE Id = '${studentAccountId}'
+      LIMIT 1
+    `);
+
+    const studentName = studentRes.records[0]?.Name || '';
+
+    // Exam-wise marks (RAW – frontend handles grouping)
+    const marksRes = await conn.query(`
+      SELECT Id,
+             Subject__c,
              Exam_Type__c,
              Marks__c,
              Max_Marks__c,
@@ -105,10 +104,14 @@ router.get('/parent/results', auth, async (req, res) => {
       FROM Student_Mark__c
       WHERE Student__c = '${studentAccountId}'
         AND Status__c = 'Published'
-      ORDER BY Exam_Type__c
+      ORDER BY Exam_Type__c, Subject__c
     `);
 
-    res.json({ success: true, results: result.records });
+    res.json({
+      success: true,
+      studentName,
+      results: marksRes.records,
+    });
 
   } catch (err) {
     console.error('❌ PARENT RESULTS ERROR =>', err.message);
@@ -125,18 +128,18 @@ router.get('/:id', auth, async (req, res) => {
   try {
     const conn = await salesforceLogin();
 
-    const result = await conn.query(
-      `SELECT Student__r.Name,
-              Class__c,
-              Subject__c,
-              Exam_Type__c,
-              Marks__c,
-              Max_Marks__c,
-              Status__c
-       FROM Student_Mark__c
-       WHERE Id = '${req.params.id}'
-       LIMIT 1`
-    );
+    const result = await conn.query(`
+      SELECT Student__r.Name,
+             Class__c,
+             Subject__c,
+             Exam_Type__c,
+             Marks__c,
+             Max_Marks__c,
+             Status__c
+      FROM Student_Mark__c
+      WHERE Id = '${req.params.id}'
+      LIMIT 1
+    `);
 
     if (!result.records.length) {
       return res.status(404).json({ message: 'Marks not found' });
@@ -152,7 +155,7 @@ router.get('/:id', auth, async (req, res) => {
 
 /**
  * =====================================
- * MANAGER → PUBLISH RESULTS (CLASS-WISE)
+ * MANAGER → PUBLISH RESULTS (EXAM + CLASS)
  * =====================================
  */
 router.post('/publish', auth, async (req, res) => {
@@ -168,20 +171,20 @@ router.post('/publish', auth, async (req, res) => {
 
     const conn = await salesforceLogin();
 
-    // 1️⃣ FETCH SUBMITTED MARKS
-    const marksRes = await conn.query(
-      `SELECT Id, Student__c
-       FROM Student_Mark__c
-       WHERE Exam_Type__c = '${examType}'
-         AND Class__c = '${className}'
-         AND Status__c = 'Submitted'`
-    );
+    // Fetch submitted marks (ONLY this exam)
+    const marksRes = await conn.query(`
+      SELECT Id, Student__c
+      FROM Student_Mark__c
+      WHERE Exam_Type__c = '${examType}'
+        AND Class__c = '${className}'
+        AND Status__c = 'Submitted'
+    `);
 
     if (!marksRes.records.length) {
       return res.json({ success: true, message: 'No marks to publish' });
     }
 
-    // 2️⃣ UPDATE TO PUBLISHED
+    // Update → Published
     await conn.sobject('Student_Mark__c').update(
       marksRes.records.map(r => ({
         Id: r.Id,
@@ -189,33 +192,18 @@ router.post('/publish', auth, async (req, res) => {
       }))
     );
 
-    // 3️⃣ FETCH PARENT TOKENS (🔥 FINAL FIX)
-    const studentIds = marksRes.records
-      .map(r => r.Student__c)
-      .filter(Boolean);
+    // Parent tokens via AccountId
+    const studentIds = [...new Set(marksRes.records.map(r => r.Student__c))];
 
-    if (!studentIds.length) {
-      return res.json({
-        success: true,
-        publishedCount: marksRes.records.length,
-        notifiedParents: 0,
-      });
-    }
+    const parentsRes = await conn.query(`
+      SELECT FCM_Token__c
+      FROM Contact
+      WHERE AccountId IN (${studentIds.map(id => `'${id}'`).join(',')})
+        AND FCM_Token__c != null
+    `);
 
-    const parentsRes = await conn.query(
-  `SELECT FCM_Token__c
-   FROM Contact
-   WHERE AccountId IN (${studentIds.map(id => `'${id}'`).join(',')})
-     AND FCM_Token__c != null`
-);
+    const tokens = parentsRes.records.map(r => r.FCM_Token__c);
 
-    const tokens = parentsRes.records
-      .map(r => r.FCM_Token__c)
-      .filter(Boolean);
-
-    console.log('📲 Parent FCM tokens =>', tokens);
-
-    // 4️⃣ SEND BULK PUSH
     if (tokens.length) {
       await sendPushBulk(
         tokens,
