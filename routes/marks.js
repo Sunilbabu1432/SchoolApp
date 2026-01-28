@@ -26,6 +26,7 @@ router.post('/', auth, async (req, res) => {
 
     const conn = await salesforceLogin();
 
+    // 1️⃣ CREATE MARK
     const markResult = await conn.sobject('Student_Mark__c').create({
       Student__c: studentId,
       Class__c: className,
@@ -37,6 +38,7 @@ router.post('/', auth, async (req, res) => {
       Teacher__c: req.user.contactId,
     });
 
+    // 2️⃣ FETCH STUDENT + MANAGER
     const accRes = await conn.query(
       `SELECT Id, Name, Manager__c
        FROM Account
@@ -50,6 +52,7 @@ router.post('/', auth, async (req, res) => {
 
     const student = accRes.records[0];
 
+    // 3️⃣ FETCH MANAGER TOKEN
     const mgrRes = await conn.query(
       `SELECT FCM_Token__c
        FROM Contact
@@ -165,6 +168,7 @@ router.post('/publish', auth, async (req, res) => {
 
     const conn = await salesforceLogin();
 
+    // 1️⃣ FETCH SUBMITTED MARKS
     const marksRes = await conn.query(
       `SELECT Id, Student__c
        FROM Student_Mark__c
@@ -177,10 +181,15 @@ router.post('/publish', auth, async (req, res) => {
       return res.json({ success: true, message: 'No marks to publish' });
     }
 
+    // 2️⃣ UPDATE TO PUBLISHED
     await conn.sobject('Student_Mark__c').update(
-      marksRes.records.map(r => ({ Id: r.Id, Status__c: 'Published' }))
+      marksRes.records.map(r => ({
+        Id: r.Id,
+        Status__c: 'Published',
+      }))
     );
 
+    // 3️⃣ FETCH PARENT TOKENS (🔥 FINAL FIX)
     const studentIds = marksRes.records
       .map(r => r.Student__c)
       .filter(Boolean);
@@ -196,12 +205,17 @@ router.post('/publish', auth, async (req, res) => {
     const parentsRes = await conn.query(
       `SELECT FCM_Token__c
        FROM Contact
-       WHERE AccountId IN (${studentIds.map(id => `'${id}'`).join(',')})
+       WHERE Student_Account__c IN (${studentIds.map(id => `'${id}'`).join(',')})
          AND FCM_Token__c != null`
     );
 
-    const tokens = parentsRes.records.map(r => r.FCM_Token__c);
+    const tokens = parentsRes.records
+      .map(r => r.FCM_Token__c)
+      .filter(Boolean);
 
+    console.log('📲 Parent FCM tokens =>', tokens);
+
+    // 4️⃣ SEND BULK PUSH
     if (tokens.length) {
       await sendPushBulk(
         tokens,
