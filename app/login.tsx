@@ -11,23 +11,49 @@ import { useState } from 'react';
 import { useRouter } from 'expo-router';
 import api from '../services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import messaging from '@react-native-firebase/messaging'; // ✅ ADD
 
 export default function Login() {
   const [mobile, setMobile] = useState('');
   const router = useRouter();
 
+  // ✅ SAVE FCM TOKEN (COMMON FOR ALL ROLES)
+  const saveFcmToken = async (authToken: string) => {
+    try {
+      // set auth header before calling save-token
+      api.defaults.headers.common.Authorization = `Bearer ${authToken}`;
+
+      const token = await messaging().getToken();
+      await api.post('/save-token', { token });
+
+      console.log('✅ FCM token saved');
+    } catch (err) {
+      console.log('❌ FCM token save failed', err);
+    }
+  };
+
   const login = async () => {
     try {
       const res = await api.post('/auth/login', { mobile });
 
-      // 🔴 IMPORTANT: store token
+      // 🔴 store token
       await AsyncStorage.setItem('token', res.data.token);
 
-      if (res.data.role === 'Teacher') {
+      // 🔥 SAVE FCM TOKEN (Teacher / Manager / Parent)
+      await saveFcmToken(res.data.token);
+
+      const role = res.data.role;
+
+      if (role === 'Teacher') {
         router.replace('/teacherHome');
-      } else {
+      } else if (role === 'Manager') {
         router.replace('/managerHome');
+      } else if (role === 'Parent') {
+        router.replace('/parentHome');
+      } else {
+        alert('Unknown role');
       }
+
     } catch (err) {
       console.log('LOGIN FAILED', err);
       alert('Login failed');

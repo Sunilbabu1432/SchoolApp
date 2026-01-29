@@ -6,31 +6,56 @@ import {
   ScrollView,
 } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import api from '../services/api';
 
 export default function ManagerComplaints() {
-  const { caseId } = useLocalSearchParams();
+  const params = useLocalSearchParams();
+  const caseIdParam = params.caseId;
+
+  // ✅ Ensure caseId is string
+  const caseId =
+    Array.isArray(caseIdParam) ? caseIdParam[0] : caseIdParam;
+
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (caseId) {
-      loadCase();
-    }
-  }, [caseId]);
+  // ✅ LOAD CASE FUNCTION
+  const loadCase = useCallback(async () => {
+    if (!caseId) return;
 
-  const loadCase = async () => {
     try {
+      console.log('📡 Loading case:', caseId);
+
       const res = await api.get(`/cases/${caseId}`);
+      console.log('✅ Case data:', res.data);
+
       setData(res.data);
-    } catch {
-      console.log('Load case failed');
+    } catch (err) {
+      console.log('❌ Load case failed', err);
     } finally {
       setLoading(false);
     }
-  };
+  }, [caseId]);
 
+  useEffect(() => {
+    if (!caseId) {
+      setLoading(false);
+      return;
+    }
+    loadCase();
+  }, [loadCase]);
+
+  // 🔴 CASE ID NOT FOUND
+  if (!caseId) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.loadingText}>No complaint selected</Text>
+      </View>
+    );
+  }
+
+  // ⏳ LOADING
   if (loading) {
     return (
       <View style={styles.center}>
@@ -40,8 +65,17 @@ export default function ManagerComplaints() {
     );
   }
 
+  // ❌ NO DATA
+  if (!data) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.loadingText}>Complaint not found</Text>
+      </View>
+    );
+  }
+
   return (
-    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 30 }}>
+    <ScrollView style={styles.container}>
       <Text style={styles.title}>Complaint Details</Text>
 
       <View style={styles.card}>
@@ -75,50 +109,13 @@ export default function ManagerComplaints() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f5f7fb',
-    padding: 20,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: '700',
-    textAlign: 'center',
-    marginBottom: 20,
-    color: '#1f2937',
-  },
-  card: {
-    backgroundColor: '#ffffff',
-    borderRadius: 14,
-    padding: 18,
-    elevation: 3,
-  },
-  field: {
-    marginBottom: 14,
-  },
-  label: {
-    fontSize: 12,
-    color: '#6b7280',
-    marginBottom: 4,
-  },
-  value: {
-    fontSize: 15,
-    fontWeight: '500',
-    color: '#111827',
-  },
-  status: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#2563eb',
-  },
-  center: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#f5f7fb',
-  },
-  loadingText: {
-    marginTop: 10,
-    color: '#6b7280',
-  },
+  container: { flex: 1, backgroundColor: '#f5f7fb', padding: 20 },
+  title: { fontSize: 24, fontWeight: '700', textAlign: 'center', marginBottom: 20 },
+  card: { backgroundColor: '#fff', borderRadius: 14, padding: 18 },
+  field: { marginBottom: 14 },
+  label: { fontSize: 12, color: '#6b7280' },
+  value: { fontSize: 15, fontWeight: '500' },
+  status: { fontSize: 15, fontWeight: '700', color: '#2563eb' },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  loadingText: { marginTop: 10, color: '#6b7280' },
 });

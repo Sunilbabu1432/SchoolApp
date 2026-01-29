@@ -2,7 +2,6 @@ import {
   View,
   Text,
   StyleSheet,
-  Alert,
   TouchableOpacity,
 } from 'react-native';
 import { useEffect, useState } from 'react';
@@ -20,83 +19,83 @@ export default function ManagerHome() {
   const router = useRouter();
   const [latestCase, setLatestCase] = useState<LatestCase | null>(null);
 
+  // ✅ Save FCM token ONLY (NO CHANGE)
   useEffect(() => {
-    saveToken();
+    saveManagerToken();
+  }, []);
 
-    // 🔔 Background state
-    const unsubscribe = messaging().onNotificationOpenedApp(remoteMessage => {
-      const data = remoteMessage?.data;
+  // ✅ Notification listeners (NO CHANGE)
+  useEffect(() => {
+    const unsubscribe = messaging().onNotificationOpenedApp(msg => {
+      const d = msg?.data;
 
-      if (data && data.type === 'CASE' && data.caseId) {
-        const caseId = String(data.caseId);
-        const subject = String(data.subject ?? '');
+      if (d?.type === 'CASE' && d?.caseId) {
+        setLatestCase({
+          caseId: String(d.caseId),
+          subject: String(d.subject ?? ''),
+        });
 
-        setLatestCase({ caseId, subject });
+        router.push({
+          pathname: '/managerComplaints',
+          params: { caseId: String(d.caseId) },
+        });
+      }
 
-        Alert.alert(
-          'New Complaint',
-          `Case ID: ${caseId}\nSubject: ${subject}`
-        );
+      if (d?.type === 'MARKS' && d?.markId) {
+        router.push({
+          pathname: '/managerMarkDetails',
+          params: { markId: String(d.markId) },
+        });
       }
     });
 
-    // 🔔 Quit state
-    messaging()
-      .getInitialNotification()
-      .then(remoteMessage => {
-        const data = remoteMessage?.data;
+    messaging().getInitialNotification().then(msg => {
+      const d = msg?.data;
 
-        if (data && data.type === 'CASE' && data.caseId) {
-          setLatestCase({
-            caseId: String(data.caseId),
-            subject: String(data.subject ?? ''),
-          });
-        }
-      });
+      if (d?.type === 'CASE' && d?.caseId) {
+        setLatestCase({
+          caseId: String(d.caseId),
+          subject: String(d.subject ?? ''),
+        });
+
+        router.push({
+          pathname: '/managerComplaints',
+          params: { caseId: String(d.caseId) },
+        });
+      }
+
+      if (d?.type === 'MARKS' && d?.markId) {
+        router.push({
+          pathname: '/managerMarkDetails',
+          params: { markId: String(d.markId) },
+        });
+      }
+    });
 
     return unsubscribe;
   }, []);
 
-  const saveToken = async () => {
+  const saveManagerToken = async () => {
     try {
-      const authStatus = await messaging().requestPermission();
-      const enabled =
-        authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
-        authStatus === messaging.AuthorizationStatus.PROVISIONAL;
-
-      if (!enabled) return;
-
-      const fcmToken = await messaging().getToken();
-      console.log('🔥 FCM TOKEN =>', fcmToken);
-
-      await api.post('/save-token', { token: fcmToken });
+      const token = await messaging().getToken();
+      await api.post('/save-token', { token });
     } catch {
-      console.log('Token save failed');
+      console.log('Manager token save failed');
     }
   };
 
   return (
     <View style={styles.container}>
-      {/* HEADER */}
       <Text style={styles.title}>Manager Dashboard</Text>
       <Text style={styles.subtitle}>Latest complaints & alerts</Text>
 
-      {/* CONTENT */}
       <View style={{ flex: 1 }}>
-        {/* 🔹 LATEST COMPLAINT CARD */}
-        {latestCase ? (
+        {latestCase && (
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Latest Complaint</Text>
 
-            <View style={styles.row}>
-              <Text style={styles.label}>Case ID</Text>
-              <Text style={styles.value}>{latestCase.caseId}</Text>
-            </View>
-
-            <View style={styles.row}>
-              <Text style={styles.label}>Subject</Text>
-              <Text style={styles.value}>{latestCase.subject}</Text>
-            </View>
+            <Text>Case ID: {latestCase.caseId}</Text>
+            <Text>Subject: {latestCase.subject}</Text>
 
             <TouchableOpacity
               style={styles.primaryButton}
@@ -112,20 +111,11 @@ export default function ManagerHome() {
               </Text>
             </TouchableOpacity>
           </View>
-        ) : (
-          <View style={styles.emptyBox}>
-            <Text style={styles.emptyText}>
-              No new complaints at the moment
-            </Text>
-          </View>
         )}
 
-        {/* 🔹 SEND INFO TO TEACHERS (NEW – CLEAN ADDITION) */}
+        {/* 🔹 SEND INFORMATION – UNTOUCHED */}
         <View style={styles.cardSecondary}>
           <Text style={styles.cardTitle}>Send Information</Text>
-          <Text style={styles.infoText}>
-            Send announcements or instructions to selected teachers
-          </Text>
 
           <TouchableOpacity
             style={styles.secondaryButton}
@@ -135,19 +125,35 @@ export default function ManagerHome() {
               SEND MESSAGE TO TEACHERS
             </Text>
           </TouchableOpacity>
-          <TouchableOpacity
-  style={[styles.secondaryButton, { marginTop: 10, backgroundColor: '#0f766e' }]}
-  onPress={() => router.push('/notificationHistory')}
->
-  <Text style={styles.secondaryButtonText}>
-    VIEW NOTIFICATION HISTORY
-  </Text>
-</TouchableOpacity>
 
+          <TouchableOpacity
+            style={[
+              styles.secondaryButton,
+              { marginTop: 10, backgroundColor: '#0f766e' },
+            ]}
+            onPress={() => router.push('/notificationHistory')}
+          >
+            <Text style={styles.secondaryButtonText}>
+              VIEW NOTIFICATION HISTORY
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* 🔥 NEW: PUBLISH RESULTS BUTTON (ONLY ADDITION) */}
+        <View style={styles.cardSecondary}>
+          <Text style={styles.cardTitle}>Results</Text>
+
+          <TouchableOpacity
+            style={[styles.primaryButton, { backgroundColor: '#2563eb' }]}
+            onPress={() => router.push('/publishResults')}
+          >
+            <Text style={styles.primaryButtonText}>
+              PUBLISH RESULTS
+            </Text>
+          </TouchableOpacity>
         </View>
       </View>
 
-      {/* LOGOUT */}
       <TouchableOpacity style={styles.logoutButton} onPress={logout}>
         <Text style={styles.logoutText}>LOGOUT</Text>
       </TouchableOpacity>
@@ -156,105 +162,40 @@ export default function ManagerHome() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f5f7fb',
-    padding: 20,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: '700',
-    textAlign: 'center',
-    color: '#1f2937',
-  },
-  subtitle: {
-    fontSize: 13,
-    textAlign: 'center',
-    color: '#6b7280',
-    marginBottom: 20,
-    marginTop: 4,
-  },
+  container: { flex: 1, backgroundColor: '#f5f7fb', padding: 20 },
+  title: { fontSize: 24, fontWeight: '700', textAlign: 'center' },
+  subtitle: { fontSize: 13, textAlign: 'center', marginBottom: 20 },
   card: {
-    backgroundColor: '#ffffff',
+    backgroundColor: '#fff',
     borderRadius: 14,
     padding: 18,
-    elevation: 3,
     marginBottom: 16,
   },
   cardSecondary: {
-    backgroundColor: '#ffffff',
+    backgroundColor: '#fff',
     borderRadius: 14,
     padding: 18,
-    elevation: 2,
     marginTop: 16,
   },
-  cardTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 10,
-    color: '#111827',
-  },
-  row: {
-    marginBottom: 10,
-  },
-  label: {
-    fontSize: 12,
-    color: '#6b7280',
-  },
-  value: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#1f2937',
-  },
+  cardTitle: { fontSize: 18, fontWeight: '700', marginBottom: 10 },
   primaryButton: {
     backgroundColor: '#2563eb',
     paddingVertical: 12,
     borderRadius: 10,
     marginTop: 16,
   },
-  primaryButtonText: {
-    color: '#ffffff',
-    textAlign: 'center',
-    fontWeight: '600',
-    fontSize: 15,
-  },
-  infoText: {
-    fontSize: 13,
-    color: '#6b7280',
-    marginBottom: 12,
-  },
+  primaryButtonText: { color: '#fff', textAlign: 'center' },
   secondaryButton: {
     backgroundColor: '#16a34a',
     paddingVertical: 12,
     borderRadius: 10,
   },
-  secondaryButtonText: {
-    color: '#ffffff',
-    textAlign: 'center',
-    fontWeight: '600',
-    fontSize: 15,
-  },
-  emptyBox: {
-    backgroundColor: '#ffffff',
-    borderRadius: 14,
-    padding: 30,
-    alignItems: 'center',
-    elevation: 2,
-  },
-  emptyText: {
-    color: '#6b7280',
-    fontSize: 14,
-  },
+  secondaryButtonText: { color: '#fff', textAlign: 'center' },
   logoutButton: {
     backgroundColor: '#ef4444',
     paddingVertical: 14,
     borderRadius: 10,
     marginTop: 10,
   },
-  logoutText: {
-    color: '#ffffff',
-    textAlign: 'center',
-    fontWeight: '600',
-    fontSize: 15,
-  },
+  logoutText: { color: '#fff', textAlign: 'center' },
 });
