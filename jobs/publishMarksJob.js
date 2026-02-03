@@ -30,7 +30,7 @@ cron.schedule('*/5 * * * *', async () => {
       const expectedRes = await conn.query(`
         SELECT COUNT(Id) cnt
         FROM Teacher_Assignment__c
-        WHERE Class__c = '${className}'
+        WHERE Class_Name__c = '${className}'
       `);
 
       const expectedCount = expectedRes.records[0]?.cnt || 0;
