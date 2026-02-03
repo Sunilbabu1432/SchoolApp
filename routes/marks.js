@@ -164,8 +164,7 @@ router.post('/schedule-publish', auth, async (req, res) => {
     await conn.sobject('Student_Mark__c').update(
       marksRes.records.map(r => ({
         Id: r.Id,
-        Publish_At__c: publishAt,
-        Publish_Status__c: 'Scheduled',
+        Publish_At__c: publishAt
       }))
     );
 
