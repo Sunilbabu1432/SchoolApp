@@ -8,13 +8,12 @@ cron.schedule('*/5 * * * *', async () => {
   try {
     const conn = await salesforceLogin();
 
-    // 1️⃣ Find exam + class combos ready by time
+    // 1️⃣ Find exam + class combinations which have submitted marks & schedule set
     const pendingRes = await conn.query(`
       SELECT Exam_Type__c, Class__c
       FROM Student_Mark__c
       WHERE Status__c = 'Submitted'
         AND Publish_At__c != null
-        AND Publish_At__c <= NOW()
       GROUP BY Exam_Type__c, Class__c
     `);
 
@@ -27,7 +26,7 @@ cron.schedule('*/5 * * * *', async () => {
       const examType = row.Exam_Type__c;
       const className = row.Class__c;
 
-      // 2️⃣ Expected teachers/subjects count
+      // 2️⃣ Expected teachers / subjects count from Teacher_Assignment__c
       const expectedRes = await conn.query(`
         SELECT COUNT(Id) cnt
         FROM Teacher_Assignment__c
@@ -41,28 +40,36 @@ cron.schedule('*/5 * * * *', async () => {
         continue;
       }
 
-      // 3️⃣ Submitted marks count
+      // 3️⃣ Fetch submitted marks WITH Publish_At__c
       const submittedRes = await conn.query(`
-        SELECT Id, Student__c
+        SELECT Id, Student__c, Publish_At__c
         FROM Student_Mark__c
         WHERE Exam_Type__c = '${examType}'
           AND Class__c = '${className}'
           AND Status__c = 'Submitted'
+          AND Publish_At__c != null
       `);
 
-      const submittedCount = submittedRes.records.length;
+      const now = new Date();
 
-      // 4️⃣ Validation
+      // ⏰ Time check in Node (NO NOW() in SOQL)
+      const readyMarks = submittedRes.records.filter(r =>
+        new Date(r.Publish_At__c) <= now
+      );
+
+      const submittedCount = readyMarks.length;
+
+      // 4️⃣ Validation: all teachers submitted + time reached
       if (submittedCount < expectedCount) {
         console.log(
           `⏸️ Waiting: ${className} ${examType} (${submittedCount}/${expectedCount})`
         );
-        continue; // ❌ do not publish
+        continue; // ❌ Do not publish
       }
 
-      // 5️⃣ Publish all
+      // 5️⃣ Publish marks
       await conn.sobject('Student_Mark__c').update(
-        submittedRes.records.map(r => ({
+        readyMarks.map(r => ({
           Id: r.Id,
           Status__c: 'Published',
         }))
@@ -73,7 +80,7 @@ cron.schedule('*/5 * * * *', async () => {
       );
 
       // 6️⃣ Notify parents
-      const studentIds = [...new Set(submittedRes.records.map(r => r.Student__c))];
+      const studentIds = [...new Set(readyMarks.map(r => r.Student__c))];
 
       const parentsRes = await conn.query(`
         SELECT FCM_Token__c
