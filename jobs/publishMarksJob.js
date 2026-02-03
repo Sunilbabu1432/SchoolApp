@@ -28,10 +28,11 @@ cron.schedule('*/5 * * * *', async () => {
 
       // 2️⃣ Expected teachers / subjects count from Teacher_Assignment__c
       const expectedRes = await conn.query(`
-        SELECT COUNT(Id) cnt
-        FROM Teacher_Assignment__c
-        WHERE Class_Name__c = '${className}'
-      `);
+  SELECT COUNT(Id) cnt
+  FROM Teacher_Assignment__c
+  WHERE Class_Name__c = '${className}'
+`);
+
 
       const expectedCount = expectedRes.records[0]?.cnt || 0;
 
@@ -45,7 +46,7 @@ cron.schedule('*/5 * * * *', async () => {
         SELECT Id, Student__c, Publish_At__c
         FROM Student_Mark__c
         WHERE Exam_Type__c = '${examType}'
-          AND Class__c = '${className}'
+          AND Class_Name__c  = '${className}'
           AND Status__c = 'Submitted'
           AND Publish_At__c != null
       `);
