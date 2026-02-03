@@ -15,6 +15,9 @@ app.use('/save-token', require('./routes/saveToken'));
 app.use('/cases', require('./routes/cases'));
 app.use('/teachers', require('./routes/teachers'));
 
+require('./jobs/publishMarksJob');
+
+
 
 const salesforceMiddleware = require('./middleware/salesforceMiddleware');
 
@@ -23,6 +26,7 @@ app.use('/notifications', salesforceMiddleware, require('./routes/notificationRo
 app.use('/marks', require('./routes/marks'));
 
 app.use('/mark-action', require('./routes/markAction'));
+
 
 
 

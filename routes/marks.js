@@ -20,7 +20,6 @@ router.post('/', auth, async (req, res) => {
 
     const conn = await salesforceLogin();
 
-    // 1️⃣ CREATE MARK
     const markResult = await conn.sobject('Student_Mark__c').create({
       Student__c: studentId,
       Class__c: className,
@@ -32,7 +31,6 @@ router.post('/', auth, async (req, res) => {
       Teacher__c: req.user.contactId,
     });
 
-    // 2️⃣ CHECK → FIRST SUBJECT FOR THIS EXAM?
     const existingMarks = await conn.query(`
       SELECT Id
       FROM Student_Mark__c
@@ -41,7 +39,6 @@ router.post('/', auth, async (req, res) => {
         AND Status__c = 'Submitted'
     `);
 
-    // 👉 ONLY FIRST SUBJECT triggers notification
     if (existingMarks.records.length === 1) {
       const accRes = await conn.query(`
         SELECT Name, Manager__c
@@ -129,7 +126,47 @@ router.get('/parent/results', auth, async (req, res) => {
 
 /**
  * =====================================
+ * MANAGER → SCHEDULE PUBLISH (NEW)
+ * =====================================
+ */
+router.post('/schedule-publish', auth, async (req, res) => {
+  try {
+    if (req.user.role !== 'Manager') {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    const { examType, className, publishAt } = req.body;
+
+    if (!examType || !className || !publishAt) {
+      return res.status(400).json({
+        message: 'examType, className and publishAt required',
+      });
+    }
+
+    const conn = await salesforceLogin();
+
+    await conn.sobject('Exam__c').update({
+      Exam_Type__c: examType,
+      Class__c: className,
+      Publish_At__c: publishAt,
+      Publish_Status__c: 'Scheduled',
+    });
+
+    res.json({
+      success: true,
+      message: 'Exam scheduled successfully',
+    });
+
+  } catch (err) {
+    console.error('❌ SCHEDULE ERROR =>', err.message);
+    res.status(500).json({ message: 'Failed to schedule publish' });
+  }
+});
+
+/**
+ * =====================================
  * MANAGER → GET MARK DETAILS
+ * ⚠️ MUST BE LAST
  * =====================================
  */
 router.get('/:id', auth, async (req, res) => {
@@ -158,72 +195,6 @@ router.get('/:id', auth, async (req, res) => {
   } catch (err) {
     console.error('❌ GET MARK ERROR =>', err.message);
     res.status(500).json({ message: 'Failed to load marks' });
-  }
-});
-
-/**
- * =====================================
- * MANAGER → PUBLISH RESULTS (EXAM + CLASS)
- * =====================================
- */
-router.post('/publish', auth, async (req, res) => {
-  try {
-    if (req.user.role !== 'Manager') {
-      return res.status(403).json({ message: 'Access denied' });
-    }
-
-    const { examType, className } = req.body;
-    if (!examType || !className) {
-      return res.status(400).json({ message: 'Missing examType or className' });
-    }
-
-    const conn = await salesforceLogin();
-
-    const marksRes = await conn.query(`
-      SELECT Id, Student__c
-      FROM Student_Mark__c
-      WHERE Exam_Type__c = '${examType}'
-        AND Class__c = '${className}'
-        AND Status__c = 'Submitted'
-    `);
-
-    if (!marksRes.records.length) {
-      return res.json({ success: true, message: 'No marks to publish' });
-    }
-
-    await conn.sobject('Student_Mark__c').update(
-      marksRes.records.map(r => ({ Id: r.Id, Status__c: 'Published' }))
-    );
-
-    const studentIds = [...new Set(marksRes.records.map(r => r.Student__c))];
-
-    const parentsRes = await conn.query(`
-      SELECT FCM_Token__c
-      FROM Contact
-      WHERE AccountId IN (${studentIds.map(id => `'${id}'`).join(',')})
-        AND FCM_Token__c != null
-    `);
-
-    const tokens = parentsRes.records.map(r => r.FCM_Token__c);
-
-    if (tokens.length) {
-      await sendPushBulk(
-        tokens,
-        '📢 Exam Results Published',
-        `${examType} results published for ${className}`,
-        { type: 'RESULT_PUBLISHED', examType, className }
-      );
-    }
-
-    res.json({
-      success: true,
-      publishedCount: marksRes.records.length,
-      notifiedParents: tokens.length,
-    });
-
-  } catch (err) {
-    console.error('❌ PUBLISH ERROR =>', err.message);
-    res.status(500).json({ message: 'Failed to publish results' });
   }
 });
 
