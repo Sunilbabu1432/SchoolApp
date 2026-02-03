@@ -145,14 +145,31 @@ router.post('/schedule-publish', auth, async (req, res) => {
 
     const conn = await salesforceLogin();
 
+    // 🔍 1️⃣ FIND EXAM RECORD FIRST
+    const examRes = await conn.query(`
+      SELECT Id
+      FROM Exam__c
+      WHERE Exam_Type__c = '${examType}'
+        AND Class__c = '${className}'
+      LIMIT 1
+    `);
+
+    if (!examRes.records.length) {
+      return res.status(404).json({
+        message: 'Exam record not found',
+      });
+    }
+
+    const examId = examRes.records[0].Id;
+
+    // ✅ 2️⃣ UPDATE USING ID (CORRECT WAY)
     await conn.sobject('Exam__c').update({
-      Exam_Type__c: examType,
-      Class__c: className,
+      Id: examId,
       Publish_At__c: publishAt,
       Publish_Status__c: 'Scheduled',
     });
 
-    res.json({
+    return res.json({
       success: true,
       message: 'Exam scheduled successfully',
     });
