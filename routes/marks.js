@@ -145,32 +145,33 @@ router.post('/schedule-publish', auth, async (req, res) => {
 
     const conn = await salesforceLogin();
 
-    // 🔍 1️⃣ FIND EXAM RECORD FIRST
-    const examRes = await conn.query(`
+    // 🔍 Find submitted marks for this exam + class
+    const marksRes = await conn.query(`
       SELECT Id
-      FROM Exam__c
+      FROM Student_Mark__c
       WHERE Exam_Type__c = '${examType}'
         AND Class__c = '${className}'
-      LIMIT 1
+        AND Status__c = 'Submitted'
     `);
 
-    if (!examRes.records.length) {
+    if (!marksRes.records.length) {
       return res.status(404).json({
-        message: 'Exam record not found',
+        message: 'No submitted marks found for this exam',
       });
     }
 
-    const examId = examRes.records[0].Id;
+    // ✅ Update all related marks with schedule info
+    await conn.sobject('Student_Mark__c').update(
+      marksRes.records.map(r => ({
+        Id: r.Id,
+        Publish_At__c: publishAt,
+        Publish_Status__c: 'Scheduled',
+      }))
+    );
 
-    // ✅ 2️⃣ UPDATE USING ID (CORRECT WAY)
-    await conn.sobject('Exam__c').update({
-      Id: examId,
-      Publish_At__c: publishAt,
-      Publish_Status__c: 'Scheduled',
-    });
-
-    return res.json({
+    res.json({
       success: true,
+      scheduledCount: marksRes.records.length,
       message: 'Exam scheduled successfully',
     });
 
@@ -179,6 +180,7 @@ router.post('/schedule-publish', auth, async (req, res) => {
     res.status(500).json({ message: 'Failed to schedule publish' });
   }
 });
+
 
 /**
  * =====================================
