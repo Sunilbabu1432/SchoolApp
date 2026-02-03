@@ -10,11 +10,11 @@ cron.schedule('*/5 * * * *', async () => {
 
     // 1️⃣ Find exam + class combinations which have submitted marks & schedule set
     const pendingRes = await conn.query(`
-      SELECT Exam_Type__c, Class__c
+      SELECT Exam_Type__c, Class_Name__c
       FROM Student_Mark__c
       WHERE Status__c = 'Submitted'
         AND Publish_At__c != null
-      GROUP BY Exam_Type__c, Class__c
+      GROUP BY Exam_Type__c, Class_Name__c
     `);
 
     if (!pendingRes.records.length) {
@@ -24,7 +24,7 @@ cron.schedule('*/5 * * * *', async () => {
 
     for (const row of pendingRes.records) {
       const examType = row.Exam_Type__c;
-      const className = row.Class__c;
+      const className = row.Class_Name__c;
 
       // 2️⃣ Expected teachers / subjects count from Teacher_Assignment__c
       const expectedRes = await conn.query(`
