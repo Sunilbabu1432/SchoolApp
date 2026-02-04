@@ -92,7 +92,10 @@ const handleSchedulePublish = async (req, res) => {
     }
 
     const { examType, className, publishAt } = req.body;
+    console.log(`📅 Scheduling Request: ${className} ${examType} at ${publishAt}`);
+
     if (!publishAt || isNaN(new Date(publishAt).getTime())) {
+      console.error('❌ Invalid publish date received:', publishAt);
       return res.status(400).json({ message: 'Invalid publish date' });
     }
     const publishDate = new Date(publishAt).toISOString();
@@ -106,6 +109,8 @@ const handleSchedulePublish = async (req, res) => {
         AND Class__c = '${className}'
         AND Status__c = 'Submitted'
     `);
+
+    console.log(`📊 Found ${marksRes.records.length} marks for scheduling.`);
 
     if (!marksRes.records.length) {
       return res.status(404).json({ message: 'No submitted marks found' });
