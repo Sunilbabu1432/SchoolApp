@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const auth = require('../middleware/auth');
 const salesforceLogin = require('../config/salesforce');
-const { sendPush, sendPushBulk } = require('../services/pushService');
+const { sendPush } = require('../services/pushService');
 
 /**
  * =====================================
@@ -13,13 +13,31 @@ router.post('/', auth, async (req, res) => {
   try {
     const { studentId, className, subject, examType, marks, maxMarks } = req.body;
 
-    if (!studentId || !className || !subject || !examType ||
-        marks === undefined || maxMarks === undefined) {
+    if (
+      !studentId || !className || !subject || !examType ||
+      marks === undefined || maxMarks === undefined
+    ) {
       return res.status(400).json({ message: 'Missing fields' });
     }
 
     const conn = await salesforceLogin();
 
+    // ✅ DUPLICATE CHECK (CRITICAL FIX)
+    const dupCheck = await conn.query(`
+      SELECT Id
+      FROM Student_Mark__c
+      WHERE Student__c = '${studentId}'
+        AND Subject__c = '${subject}'
+        AND Exam_Type__c = '${examType}'
+    `);
+
+    if (dupCheck.records.length) {
+      return res.status(409).json({
+        message: 'Marks already submitted for this subject',
+      });
+    }
+
+    // ✅ CREATE MARK
     const markResult = await conn.sobject('Student_Mark__c').create({
       Student__c: studentId,
       Class__c: className,
@@ -31,15 +49,16 @@ router.post('/', auth, async (req, res) => {
       Teacher__c: req.user.contactId,
     });
 
-    const existingMarks = await conn.query(`
+    // 🔔 NOTIFY MANAGER (ON FIRST SUBMISSION FOR CLASS + EXAM)
+    const classExamMarks = await conn.query(`
       SELECT Id
       FROM Student_Mark__c
-      WHERE Student__c = '${studentId}'
+      WHERE Class__c = '${className}'
         AND Exam_Type__c = '${examType}'
         AND Status__c = 'Submitted'
     `);
 
-    if (existingMarks.records.length === 1) {
+    if (classExamMarks.records.length === 1) {
       const accRes = await conn.query(`
         SELECT Name, Manager__c
         FROM Account
@@ -47,7 +66,7 @@ router.post('/', auth, async (req, res) => {
         LIMIT 1
       `);
 
-      if (accRes.records.length && accRes.records[0].Manager__c) {
+      if (accRes.records[0]?.Manager__c) {
         const mgrRes = await conn.query(`
           SELECT FCM_Token__c
           FROM Contact
@@ -55,12 +74,12 @@ router.post('/', auth, async (req, res) => {
           LIMIT 1
         `);
 
-        if (mgrRes.records.length && mgrRes.records[0].FCM_Token__c) {
+        if (mgrRes.records[0]?.FCM_Token__c) {
           await sendPush(
             mgrRes.records[0].FCM_Token__c,
             'Marks Submitted',
-            `${accRes.records[0].Name} - ${examType} marks submitted`,
-            { type: 'MARKS_READY', examType }
+            `${examType} marks started for ${className}`,
+            { type: 'MARKS_READY', examType, className }
           );
         }
       }
@@ -126,10 +145,10 @@ router.get('/parent/results', auth, async (req, res) => {
 
 /**
  * =====================================
- * MANAGER → SCHEDULE PUBLISH (NEW)
+ * MANAGER → SCHEDULE RESULTS
  * =====================================
  */
-router.post('/schedule-publish', auth, async (req, res) => {
+router.post('/schedule', auth, async (req, res) => {
   try {
     if (req.user.role !== 'Manager') {
       return res.status(403).json({ message: 'Access denied' });
@@ -138,14 +157,14 @@ router.post('/schedule-publish', auth, async (req, res) => {
     const { examType, className, publishAt } = req.body;
 
     if (!examType || !className || !publishAt) {
-      return res.status(400).json({
-        message: 'examType, className and publishAt required',
-      });
+      return res.status(400).json({ message: 'Missing data' });
     }
+
+    // ✅ TIME NORMALIZATION (IMPORTANT FIX)
+    const publishDate = new Date(publishAt).toISOString();
 
     const conn = await salesforceLogin();
 
-    // 🔍 Find submitted marks for this exam + class
     const marksRes = await conn.query(`
       SELECT Id
       FROM Student_Mark__c
@@ -156,35 +175,33 @@ router.post('/schedule-publish', auth, async (req, res) => {
 
     if (!marksRes.records.length) {
       return res.status(404).json({
-        message: 'No submitted marks found for this exam',
+        message: 'No submitted marks found',
       });
     }
 
-    // ✅ Update all related marks with schedule info
     await conn.sobject('Student_Mark__c').update(
       marksRes.records.map(r => ({
         Id: r.Id,
-        Publish_At__c: publishAt
+        Publish_At__c: publishDate,
       }))
     );
 
     res.json({
       success: true,
       scheduledCount: marksRes.records.length,
-      message: 'Exam scheduled successfully',
+      message: 'Results scheduled successfully',
     });
 
   } catch (err) {
     console.error('❌ SCHEDULE ERROR =>', err.message);
-    res.status(500).json({ message: 'Failed to schedule publish' });
+    res.status(500).json({ message: 'Failed to schedule results' });
   }
 });
-
 
 /**
  * =====================================
  * MANAGER → GET MARK DETAILS
- * ⚠️ MUST BE LAST
+ * ⚠️ KEEP LAST
  * =====================================
  */
 router.get('/:id', auth, async (req, res) => {
