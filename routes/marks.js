@@ -45,41 +45,6 @@ router.post('/', auth, async (req, res) => {
       Teacher__c: req.user.contactId,
     });
 
-    const classExamMarks = await conn.query(`
-      SELECT Id
-      FROM Student_Mark__c
-      WHERE Class__c = '${className}'
-        AND Exam_Type__c = '${examType}'
-        AND Status__c = 'Submitted'
-    `);
-
-    if (classExamMarks.records.length === 1) {
-      const accRes = await conn.query(`
-        SELECT Manager__c
-        FROM Account
-        WHERE Id = '${studentId}'
-        LIMIT 1
-      `);
-
-      if (accRes.records[0]?.Manager__c) {
-        const mgrRes = await conn.query(`
-          SELECT FCM_Token__c
-          FROM Contact
-          WHERE Id = '${accRes.records[0].Manager__c}'
-          LIMIT 1
-        `);
-
-        if (mgrRes.records[0]?.FCM_Token__c) {
-          await sendPush(
-            mgrRes.records[0].FCM_Token__c,
-            'Marks Submitted',
-            `${examType} marks started for ${className}`,
-            { type: 'MARKS_READY', examType, className }
-          );
-        }
-      }
-    }
-
     res.json({ success: true, markId: markResult.id });
 
   } catch (err) {
@@ -164,6 +129,7 @@ router.post('/schedule', auth, async (req, res) => {
 /**
  * =====================================
  * MANAGER → PENDING SUBJECTS
+ * ✅ MUST BE BEFORE /:id
  * =====================================
  */
 router.get('/pending-subjects', auth, async (req, res) => {
@@ -176,7 +142,7 @@ router.get('/pending-subjects', auth, async (req, res) => {
     const conn = await salesforceLogin();
 
     const assignmentRes = await conn.query(`
-      SELECT Subject__c, Teacher__r.Name
+      SELECT subject__c, teacherId__r.Name
       FROM Teacher_Assignment__c
       WHERE Class_Name__c = '${className}'
     `);
@@ -192,14 +158,17 @@ router.get('/pending-subjects', auth, async (req, res) => {
     const submitted = new Set(submittedRes.records.map(r => r.Subject__c));
 
     const pending = assignmentRes.records.filter(
-      a => !submitted.has(a.Subject__c)
+      a => !submitted.has(a.subject__c)
     );
 
     res.json({
       success: true,
+      className,
+      examType,
+      pendingCount: pending.length,
       pendingSubjects: pending.map(p => ({
-        subject: p.Subject__c,
-        teacherName: p.Teacher__r?.Name || '',
+        subject: p.subject__c,
+        teacherName: p.teacherId__r?.Name || '',
       })),
     });
 
