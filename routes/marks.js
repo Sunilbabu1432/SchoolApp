@@ -85,7 +85,7 @@ router.get('/parent/results', auth, async (req, res) => {
  * MANAGER → SCHEDULE RESULTS
  * =====================================
  */
-router.post('/schedule-publish', auth, async (req, res) => {
+const handleSchedulePublish = async (req, res) => {
   try {
     if (req.user.role !== 'Manager') {
       return res.status(403).json({ message: 'Access denied' });
@@ -130,7 +130,10 @@ router.post('/schedule-publish', auth, async (req, res) => {
       error: err.message
     });
   }
-});
+};
+
+router.post('/schedule-publish', auth, handleSchedulePublish);
+router.post('/schedule', auth, handleSchedulePublish);
 
 /**
  * =====================================
