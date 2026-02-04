@@ -35,9 +35,9 @@ const checkAndPublishMarks = async () => {
 
       const expectedCount = expectedRes.records[0]?.cnt || 0;
 
-      // 3️⃣ Fetch submitted marks again from Student_Mark__c
+      // 3️⃣ Fetch submitted marks again from Student_Mark__c (with Student Name)
       const submittedRes = await conn.query(`
-        SELECT Id, Student__c, Publish_At__c
+        SELECT Id, Student__c, Student__r.Name, Publish_At__c
         FROM Student_Mark__c
         WHERE Exam_Type__c = '${examType}'
           AND Class__c = '${className}'
@@ -55,8 +55,6 @@ const checkAndPublishMarks = async () => {
       const submittedCount = readyMarks.length;
 
       // 4️⃣ Validation: all teachers submitted
-      // Only block if we HAVE assignments but not all are submitted.
-      // If expectedCount is 0, we still allow publication if marks were explicitly scheduled.
       if (expectedCount > 0 && submittedCount < expectedCount) {
         console.log(
           `⏸️ Waiting: ${className} ${examType} (${submittedCount}/${expectedCount})`
@@ -80,26 +78,28 @@ const checkAndPublishMarks = async () => {
         `🚀 Published ${submittedCount} marks for ${className} ${examType}`
       );
 
-      // 6️⃣ Notify parents
-      const studentIds = [...new Set(readyMarks.map(r => r.Student__c))];
+      // 6️⃣ Notify parents (Individualized per student)
+      const students = Array.from(new Map(readyMarks.map(r => [r.Student__c, r.Student__r?.Name])).entries());
 
-      const parentsRes = await conn.query(`
-        SELECT FCM_Token__c
-        FROM Contact
-        WHERE AccountId IN (${studentIds.map(id => `'${id}'`).join(',')})
-          AND FCM_Token__c != null
-      `);
+      for (const [studentId, studentName] of students) {
+        const parentsRes = await conn.query(`
+          SELECT FCM_Token__c
+          FROM Contact
+          WHERE AccountId = '${studentId}'
+            AND FCM_Token__c != null
+        `);
 
-      const tokens = parentsRes.records.map(r => r.FCM_Token__c);
+        const tokens = parentsRes.records.map(r => r.FCM_Token__c);
 
-      if (tokens.length) {
-        await sendPushBulk(
-          tokens,
-          '📢 Exam Results Published',
-          `${examType} results published for ${className}`,
-          { type: 'RESULT_PUBLISHED', examType, className }
-        );
-        console.log(`🔔 Notified ${tokens.length} parents`);
+        if (tokens.length) {
+          await sendPushBulk(
+            tokens,
+            '📢 Exam Results Published',
+            `${examType} results published for your kid ${studentName || 'Student'}`,
+            { type: 'RESULT_PUBLISHED', examType, className }
+          );
+          console.log(`🔔 Notified parents of ${studentName}`);
+        }
       }
     }
 
