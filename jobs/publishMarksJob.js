@@ -8,13 +8,13 @@ cron.schedule('*/5 * * * *', async () => {
   try {
     const conn = await salesforceLogin();
 
-    // 1️⃣ Find exam + class combinations which have submitted marks & schedule set
+    // 1️⃣ Student_Mark__c → Class__c (CORRECT)
     const pendingRes = await conn.query(`
-      SELECT Exam_Type__c, Class_Name__c
+      SELECT Exam_Type__c, Class__c
       FROM Student_Mark__c
       WHERE Status__c = 'Submitted'
         AND Publish_At__c != null
-      GROUP BY Exam_Type__c, Class_Name__c
+      GROUP BY Exam_Type__c, Class__c
     `);
 
     if (!pendingRes.records.length) {
@@ -24,15 +24,14 @@ cron.schedule('*/5 * * * *', async () => {
 
     for (const row of pendingRes.records) {
       const examType = row.Exam_Type__c;
-      const className = row.Class_Name__c;
+      const className = row.Class__c;
 
-      // 2️⃣ Expected teachers / subjects count from Teacher_Assignment__c
+      // 2️⃣ Teacher_Assignment__c → Class_Name__c (CORRECT)
       const expectedRes = await conn.query(`
-  SELECT COUNT(Id) cnt
-  FROM Teacher_Assignment__c
-  WHERE Class_Name__c = '${className}'
-`);
-
+        SELECT COUNT(Id) cnt
+        FROM Teacher_Assignment__c
+        WHERE Class_Name__c = '${className}'
+      `);
 
       const expectedCount = expectedRes.records[0]?.cnt || 0;
 
@@ -41,34 +40,33 @@ cron.schedule('*/5 * * * *', async () => {
         continue;
       }
 
-      // 3️⃣ Fetch submitted marks WITH Publish_At__c
+      // 3️⃣ Fetch submitted marks (Student_Mark__c again → Class__c)
       const submittedRes = await conn.query(`
         SELECT Id, Student__c, Publish_At__c
         FROM Student_Mark__c
         WHERE Exam_Type__c = '${examType}'
-          AND Class_Name__c  = '${className}'
+          AND Class__c = '${className}'
           AND Status__c = 'Submitted'
           AND Publish_At__c != null
       `);
 
       const now = new Date();
 
-      // ⏰ Time check in Node (NO NOW() in SOQL)
       const readyMarks = submittedRes.records.filter(r =>
         new Date(r.Publish_At__c) <= now
       );
 
       const submittedCount = readyMarks.length;
 
-      // 4️⃣ Validation: all teachers submitted + time reached
+      // 4️⃣ Validation
       if (submittedCount < expectedCount) {
         console.log(
           `⏸️ Waiting: ${className} ${examType} (${submittedCount}/${expectedCount})`
         );
-        continue; // ❌ Do not publish
+        continue;
       }
 
-      // 5️⃣ Publish marks
+      // 5️⃣ Publish
       await conn.sobject('Student_Mark__c').update(
         readyMarks.map(r => ({
           Id: r.Id,
