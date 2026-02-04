@@ -35,11 +35,6 @@ const checkAndPublishMarks = async () => {
 
       const expectedCount = expectedRes.records[0]?.cnt || 0;
 
-      if (expectedCount === 0) {
-        console.log(`⚠️ No teacher assignments for ${className}`);
-        continue;
-      }
-
       // 3️⃣ Fetch submitted marks again from Student_Mark__c
       const submittedRes = await conn.query(`
         SELECT Id, Student__c, Publish_At__c
@@ -60,11 +55,17 @@ const checkAndPublishMarks = async () => {
       const submittedCount = readyMarks.length;
 
       // 4️⃣ Validation: all teachers submitted
-      if (submittedCount < expectedCount) {
+      // Only block if we HAVE assignments but not all are submitted.
+      // If expectedCount is 0, we still allow publication if marks were explicitly scheduled.
+      if (expectedCount > 0 && submittedCount < expectedCount) {
         console.log(
           `⏸️ Waiting: ${className} ${examType} (${submittedCount}/${expectedCount})`
         );
         continue;
+      }
+
+      if (expectedCount === 0) {
+        console.log(`⚠️ Note: Publishing ${submittedCount} marks for ${className} ${examType} with NO teacher assignments found.`);
       }
 
       // 5️⃣ Publish marks
