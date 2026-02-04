@@ -139,14 +139,22 @@ router.get('/pending-subjects', auth, async (req, res) => {
     }
 
     const { className, examType } = req.query;
+    if (!className || !examType) {
+      return res.status(400).json({
+        message: 'className and examType required',
+      });
+    }
+
     const conn = await salesforceLogin();
 
+    // 1️⃣ All subjects for class (teacher assignment)
     const assignmentRes = await conn.query(`
-      SELECT subject__c, teacherId__r.Name
+      SELECT Subject__c, teacherId__r.Name
       FROM Teacher_Assignment__c
       WHERE Class_Name__c = '${className}'
     `);
 
+    // 2️⃣ Submitted subjects for exam
     const submittedRes = await conn.query(`
       SELECT Subject__c
       FROM Student_Mark__c
@@ -155,21 +163,24 @@ router.get('/pending-subjects', auth, async (req, res) => {
         AND Status__c = 'Submitted'
     `);
 
-    const submitted = new Set(submittedRes.records.map(r => r.Subject__c));
-
-    const pending = assignmentRes.records.filter(
-      a => !submitted.has(a.subject__c)
+    const submittedSet = new Set(
+      submittedRes.records.map(r => r.Subject__c)
     );
+
+    // 3️⃣ Pending = assigned − submitted
+    const pendingSubjects = assignmentRes.records
+      .filter(a => !submittedSet.has(a.Subject__c))
+      .map(a => ({
+        subject: a.Subject__c,
+        teacherName: a.teacherId__r?.Name || '',
+      }));
 
     res.json({
       success: true,
       className,
       examType,
-      pendingCount: pending.length,
-      pendingSubjects: pending.map(p => ({
-        subject: p.subject__c,
-        teacherName: p.teacherId__r?.Name || '',
-      })),
+      pendingCount: pendingSubjects.length,
+      pendingSubjects,
     });
 
   } catch (err) {
@@ -177,6 +188,7 @@ router.get('/pending-subjects', auth, async (req, res) => {
     res.status(500).json({ message: 'Failed to load pending subjects' });
   }
 });
+
 
 /**
  * =====================================
