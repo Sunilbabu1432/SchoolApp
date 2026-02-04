@@ -135,7 +135,7 @@ router.get('/students', async (req, res) => {
             if (ses.class && ses.date) {
                 const teacherRel = toRel(ses.teacher);
                 let sesSoql = `SELECT Id, ${teacherRel ? teacherRel + '.Name' : 'Id'} FROM Attendance_Session__c 
-                               WHERE ${ses.class} = '${escapeSOQL(classValue)}' AND ${ses.date} = '${dateLiteral}'`;
+                               WHERE ${ses.class} = '${escapeSOQL(classValue)}' AND ${ses.date} = ${dateLiteral}`;
                 if (sectionValue && ses.section) sesSoql += ` AND ${ses.section} = '${escapeSOQL(sectionValue)}'`;
                 const sesRes = await conn.query(sesSoql + " LIMIT 1");
                 if (sesRes.records.length > 0) {
@@ -176,7 +176,7 @@ router.post('/save', async (req, res) => {
             if (ses.section) sessionPayload[ses.section] = sectionValue || "";
             if (ses.teacher) sessionPayload[ses.teacher] = takenBy;
 
-            let sessionMatch = `${ses.class} = '${escapeSOQL(shortClass)}' AND ${ses.date} = '${dateLiteral}'`;
+            let sessionMatch = `${ses.class} = '${escapeSOQL(shortClass)}' AND ${ses.date} = ${dateLiteral}`;
             if (ses.section) sessionMatch += ` AND ${ses.section} = '${escapeSOQL(sectionValue || "")}'`;
 
             const existingSession = await conn.sobject('Attendance_Session__c').find(sessionMatch).limit(1);
