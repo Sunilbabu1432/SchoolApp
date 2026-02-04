@@ -67,7 +67,7 @@ router.get('/parent/results', auth, async (req, res) => {
     const conn = await salesforceLogin();
 
     const marksRes = await conn.query(`
-      SELECT Subject__c, Exam_Type__c, Marks__c, Max_Marks__c, Class__c, Student__r.Name
+      SELECT Id, Subject__c, Exam_Type__c, Marks__c, Max_Marks__c, Class__c, Student__r.Name
       FROM Student_Mark__c
       WHERE Student__c = '${req.user.studentAccountId}'
         AND Status__c = 'Published'
