@@ -13,16 +13,13 @@ router.post('/', auth, async (req, res) => {
   try {
     const { studentId, className, subject, examType, marks, maxMarks } = req.body;
 
-    if (
-      !studentId || !className || !subject || !examType ||
-      marks === undefined || maxMarks === undefined
-    ) {
+    if (!studentId || !className || !subject || !examType ||
+        marks === undefined || maxMarks === undefined) {
       return res.status(400).json({ message: 'Missing fields' });
     }
 
     const conn = await salesforceLogin();
 
-    // ✅ DUPLICATE CHECK (CRITICAL FIX)
     const dupCheck = await conn.query(`
       SELECT Id
       FROM Student_Mark__c
@@ -37,7 +34,6 @@ router.post('/', auth, async (req, res) => {
       });
     }
 
-    // ✅ CREATE MARK
     const markResult = await conn.sobject('Student_Mark__c').create({
       Student__c: studentId,
       Class__c: className,
@@ -49,7 +45,6 @@ router.post('/', auth, async (req, res) => {
       Teacher__c: req.user.contactId,
     });
 
-    // 🔔 NOTIFY MANAGER (ON FIRST SUBMISSION FOR CLASS + EXAM)
     const classExamMarks = await conn.query(`
       SELECT Id
       FROM Student_Mark__c
@@ -60,7 +55,7 @@ router.post('/', auth, async (req, res) => {
 
     if (classExamMarks.records.length === 1) {
       const accRes = await conn.query(`
-        SELECT Name, Manager__c
+        SELECT Manager__c
         FROM Account
         WHERE Id = '${studentId}'
         LIMIT 1
@@ -95,7 +90,7 @@ router.post('/', auth, async (req, res) => {
 
 /**
  * =====================================
- * PARENT → VIEW PUBLISHED RESULTS
+ * PARENT → VIEW RESULTS
  * =====================================
  */
 router.get('/parent/results', auth, async (req, res) => {
@@ -104,41 +99,18 @@ router.get('/parent/results', auth, async (req, res) => {
       return res.status(403).json({ message: 'Access denied' });
     }
 
-    const studentAccountId = req.user.studentAccountId;
-    if (!studentAccountId) {
-      return res.status(400).json({ message: 'Student not linked' });
-    }
-
     const conn = await salesforceLogin();
 
-    const studentRes = await conn.query(`
-      SELECT Name
-      FROM Account
-      WHERE Id = '${studentAccountId}'
-      LIMIT 1
-    `);
-
     const marksRes = await conn.query(`
-      SELECT Id,
-             Subject__c,
-             Exam_Type__c,
-             Marks__c,
-             Max_Marks__c,
-             Class__c
+      SELECT Subject__c, Exam_Type__c, Marks__c, Max_Marks__c, Class__c
       FROM Student_Mark__c
-      WHERE Student__c = '${studentAccountId}'
+      WHERE Student__c = '${req.user.studentAccountId}'
         AND Status__c = 'Published'
-      ORDER BY Exam_Type__c, Subject__c
     `);
 
-    res.json({
-      success: true,
-      studentName: studentRes.records[0]?.Name || '',
-      results: marksRes.records,
-    });
-
+    res.json({ success: true, results: marksRes.records });
   } catch (err) {
-    console.error('❌ PARENT RESULTS ERROR =>', err.message);
+    console.error(err.message);
     res.status(500).json({ message: 'Failed to load results' });
   }
 });
@@ -155,12 +127,6 @@ router.post('/schedule', auth, async (req, res) => {
     }
 
     const { examType, className, publishAt } = req.body;
-
-    if (!examType || !className || !publishAt) {
-      return res.status(400).json({ message: 'Missing data' });
-    }
-
-    // ✅ TIME NORMALIZATION (IMPORTANT FIX)
     const publishDate = new Date(publishAt).toISOString();
 
     const conn = await salesforceLogin();
@@ -174,9 +140,7 @@ router.post('/schedule', auth, async (req, res) => {
     `);
 
     if (!marksRes.records.length) {
-      return res.status(404).json({
-        message: 'No submitted marks found',
-      });
+      return res.status(404).json({ message: 'No submitted marks found' });
     }
 
     await conn.sobject('Student_Mark__c').update(
@@ -189,7 +153,6 @@ router.post('/schedule', auth, async (req, res) => {
     res.json({
       success: true,
       scheduledCount: marksRes.records.length,
-      message: 'Results scheduled successfully',
     });
 
   } catch (err) {
@@ -200,8 +163,55 @@ router.post('/schedule', auth, async (req, res) => {
 
 /**
  * =====================================
- * MANAGER → GET MARK DETAILS
- * ⚠️ KEEP LAST
+ * MANAGER → PENDING SUBJECTS
+ * =====================================
+ */
+router.get('/pending-subjects', auth, async (req, res) => {
+  try {
+    if (req.user.role !== 'Manager') {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    const { className, examType } = req.query;
+    const conn = await salesforceLogin();
+
+    const assignmentRes = await conn.query(`
+      SELECT Subject__c, Teacher__r.Name
+      FROM Teacher_Assignment__c
+      WHERE Class_Name__c = '${className}'
+    `);
+
+    const submittedRes = await conn.query(`
+      SELECT Subject__c
+      FROM Student_Mark__c
+      WHERE Class__c = '${className}'
+        AND Exam_Type__c = '${examType}'
+        AND Status__c = 'Submitted'
+    `);
+
+    const submitted = new Set(submittedRes.records.map(r => r.Subject__c));
+
+    const pending = assignmentRes.records.filter(
+      a => !submitted.has(a.Subject__c)
+    );
+
+    res.json({
+      success: true,
+      pendingSubjects: pending.map(p => ({
+        subject: p.Subject__c,
+        teacherName: p.Teacher__r?.Name || '',
+      })),
+    });
+
+  } catch (err) {
+    console.error('❌ PENDING SUBJECTS ERROR =>', err.message);
+    res.status(500).json({ message: 'Failed to load pending subjects' });
+  }
+});
+
+/**
+ * =====================================
+ * ⚠️ MUST BE LAST
  * =====================================
  */
 router.get('/:id', auth, async (req, res) => {
@@ -209,13 +219,7 @@ router.get('/:id', auth, async (req, res) => {
     const conn = await salesforceLogin();
 
     const result = await conn.query(`
-      SELECT Student__r.Name,
-             Class__c,
-             Subject__c,
-             Exam_Type__c,
-             Marks__c,
-             Max_Marks__c,
-             Status__c
+      SELECT Subject__c, Marks__c, Status__c
       FROM Student_Mark__c
       WHERE Id = '${req.params.id}'
       LIMIT 1
@@ -226,9 +230,8 @@ router.get('/:id', auth, async (req, res) => {
     }
 
     res.json(result.records[0]);
-
   } catch (err) {
-    console.error('❌ GET MARK ERROR =>', err.message);
+    console.error(err.message);
     res.status(500).json({ message: 'Failed to load marks' });
   }
 });
