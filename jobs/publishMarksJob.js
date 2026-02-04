@@ -8,7 +8,7 @@ cron.schedule('*/5 * * * *', async () => {
   try {
     const conn = await salesforceLogin();
 
-    // 1️⃣ Student_Mark__c → Class__c (CORRECT)
+    // 1️⃣ Student_Mark__c → use Class__c (CORRECT)
     const pendingRes = await conn.query(`
       SELECT Exam_Type__c, Class__c
       FROM Student_Mark__c
@@ -40,7 +40,7 @@ cron.schedule('*/5 * * * *', async () => {
         continue;
       }
 
-      // 3️⃣ Fetch submitted marks (Student_Mark__c again → Class__c)
+      // 3️⃣ Fetch submitted marks again from Student_Mark__c
       const submittedRes = await conn.query(`
         SELECT Id, Student__c, Publish_At__c
         FROM Student_Mark__c
@@ -52,13 +52,14 @@ cron.schedule('*/5 * * * *', async () => {
 
       const now = new Date();
 
+      // ⏰ Time check (NO NOW() in SOQL)
       const readyMarks = submittedRes.records.filter(r =>
         new Date(r.Publish_At__c) <= now
       );
 
       const submittedCount = readyMarks.length;
 
-      // 4️⃣ Validation
+      // 4️⃣ Validation: all teachers submitted
       if (submittedCount < expectedCount) {
         console.log(
           `⏸️ Waiting: ${className} ${examType} (${submittedCount}/${expectedCount})`
@@ -66,7 +67,7 @@ cron.schedule('*/5 * * * *', async () => {
         continue;
       }
 
-      // 5️⃣ Publish
+      // 5️⃣ Publish marks
       await conn.sobject('Student_Mark__c').update(
         readyMarks.map(r => ({
           Id: r.Id,
