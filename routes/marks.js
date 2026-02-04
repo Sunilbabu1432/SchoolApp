@@ -14,7 +14,7 @@ router.post('/', auth, async (req, res) => {
     const { studentId, className, subject, examType, marks, maxMarks } = req.body;
 
     if (!studentId || !className || !subject || !examType ||
-        marks === undefined || maxMarks === undefined) {
+      marks === undefined || maxMarks === undefined) {
       return res.status(400).json({ message: 'Missing fields' });
     }
 
@@ -85,13 +85,16 @@ router.get('/parent/results', auth, async (req, res) => {
  * MANAGER → SCHEDULE RESULTS
  * =====================================
  */
-router.post('/schedule', auth, async (req, res) => {
+router.post('/schedule-publish', auth, async (req, res) => {
   try {
     if (req.user.role !== 'Manager') {
       return res.status(403).json({ message: 'Access denied' });
     }
 
     const { examType, className, publishAt } = req.body;
+    if (!publishAt || isNaN(new Date(publishAt).getTime())) {
+      return res.status(400).json({ message: 'Invalid publish date' });
+    }
     const publishDate = new Date(publishAt).toISOString();
 
     const conn = await salesforceLogin();
@@ -121,8 +124,11 @@ router.post('/schedule', auth, async (req, res) => {
     });
 
   } catch (err) {
-    console.error('❌ SCHEDULE ERROR =>', err.message);
-    res.status(500).json({ message: 'Failed to schedule results' });
+    console.error('❌ SCHEDULE ERROR =>', err);
+    res.status(500).json({
+      message: 'Failed to schedule results',
+      error: err.message
+    });
   }
 });
 

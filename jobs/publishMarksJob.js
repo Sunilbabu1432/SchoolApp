@@ -2,7 +2,7 @@ const cron = require('node-cron');
 const salesforceLogin = require('../config/salesforce');
 const { sendPushBulk } = require('../services/pushService');
 
-cron.schedule('*/5 * * * *', async () => {
+const checkAndPublishMarks = async () => {
   console.log('⏳ CRON: Checking scheduled exams with counting logic...');
 
   try {
@@ -105,6 +105,10 @@ cron.schedule('*/5 * * * *', async () => {
   } catch (err) {
     console.error('❌ CRON ERROR =>', err.message);
   }
-});
+};
+
+cron.schedule('*/5 * * * *', checkAndPublishMarks);
 
 console.log('✅ publishMarksJob cron with counting initialized');
+
+module.exports = { checkAndPublishMarks };
