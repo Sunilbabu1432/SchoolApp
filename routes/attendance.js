@@ -6,8 +6,9 @@ const salesforceLogin = require('../config/salesforce');
  * Cache for resolved Account field API names to avoid repeated describe calls.
  */
 let fieldNameCache = {
-    classField: "Current_Class__c",
-    sectionField: "Section__c",
+    classField: "Class__c",
+    sectionField: null,
+    rollField: null,
     ts: 0,
 };
 
@@ -41,12 +42,13 @@ async function resolveAccountFieldNames(conn) {
         // Fix fallback to Class__c as seen in bulk_import.js
         const classField = findFieldName(["class", "Current Class", "Current_Class__c", "Class__c"]) || "Class__c";
         const sectionField = findFieldName(["section", "Section__c"]);
+        const rollField = findFieldName(["roll", "Roll Number", "Roll_No__c", "Roll_Number__c"]);
 
-        fieldNameCache = { classField, sectionField, ts: Date.now() };
+        fieldNameCache = { classField, sectionField, rollField, ts: Date.now() };
         return fieldNameCache;
     } catch (err) {
         console.error("[DESCRIBE ERROR]", err.message);
-        return { classField: "Class__c", sectionField: null, ts: Date.now() };
+        return { classField: "Class__c", sectionField: null, rollField: null, ts: Date.now() };
     }
 }
 
@@ -60,11 +62,12 @@ router.get('/students', async (req, res) => {
 
     try {
         const conn = await salesforceLogin();
-        const { classField, sectionField } = await resolveAccountFieldNames(conn);
+        const { classField, sectionField, rollField } = await resolveAccountFieldNames(conn);
 
         // Build SELECT clause based on existing fields
-        let selectFields = `Id, Name, Roll_No__c, ${classField}`;
+        let selectFields = `Id, Name, ${classField}`;
         if (sectionField) selectFields += `, ${sectionField}`;
+        if (rollField) selectFields += `, ${rollField}`;
 
         let soql = `SELECT ${selectFields} 
                     FROM Account 
