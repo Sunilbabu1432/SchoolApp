@@ -39,14 +39,15 @@ async function resolveAccountFieldNames(conn) {
             return null;
         };
 
-        const classField = findFieldName(["class", "Current Class", "Current_Class__c"]) || "Current_Class__c";
-        const sectionField = findFieldName(["section", "Section__c"]) || "Section__c";
+        // Fix fallback to Class__c as seen in bulk_import.js
+        const classField = findFieldName(["class", "Current Class", "Current_Class__c", "Class__c"]) || "Class__c";
+        const sectionField = findFieldName(["section", "Section__c"]);
 
         fieldNameCache = { classField, sectionField, ts: Date.now() };
         return fieldNameCache;
     } catch (err) {
         console.error("[DESCRIBE ERROR]", err.message);
-        return { classField: "Current_Class__c", sectionField: "Section__c", ts: Date.now() };
+        return { classField: "Class__c", sectionField: null, ts: Date.now() };
     }
 }
 
@@ -62,11 +63,15 @@ router.get('/students', async (req, res) => {
         const conn = await salesforceLogin();
         const { classField, sectionField } = await resolveAccountFieldNames(conn);
 
-        let soql = `SELECT Id, Name, Roll_No__c, ${classField}, ${sectionField} 
+        // Build SELECT clause based on existing fields
+        let selectFields = `Id, Name, Roll_No__c, ${classField}`;
+        if (sectionField) selectFields += `, ${sectionField}`;
+
+        let soql = `SELECT ${selectFields} 
                     FROM Account 
                     WHERE (${classField} = '${escapeSOQL(classValue)}' OR ${classField} = 'Class ${escapeSOQL(classValue)}')`;
 
-        if (sectionValue) {
+        if (sectionValue && sectionField) {
             soql += ` AND ${sectionField} = '${escapeSOQL(sectionValue)}'`;
         }
         soql += " ORDER BY Name ASC LIMIT 500";
