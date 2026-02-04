@@ -163,7 +163,7 @@ router.post('/save', async (req, res) => {
                 Student__c: item.studentId,
                 Attendance_Date__c: dateLiteral,
                 Attendance_Status__c: item.status,
-                Roll_Number__c: item.rollNumber || "",
+                Roll_No__c: item.rollNumber || "",
                 Class__c: classValue.replace(/^Class\s+/i, ""),
                 Section__c: sectionValue || ""
             };
