@@ -67,13 +67,19 @@ router.get('/parent/results', auth, async (req, res) => {
     const conn = await salesforceLogin();
 
     const marksRes = await conn.query(`
-      SELECT Subject__c, Exam_Type__c, Marks__c, Max_Marks__c, Class__c
+      SELECT Subject__c, Exam_Type__c, Marks__c, Max_Marks__c, Class__c, Student__r.Name
       FROM Student_Mark__c
       WHERE Student__c = '${req.user.studentAccountId}'
         AND Status__c = 'Published'
     `);
 
-    res.json({ success: true, results: marksRes.records });
+    const studentName = marksRes.records.length > 0 ? marksRes.records[0].Student__r.Name : '';
+
+    res.json({
+      success: true,
+      results: marksRes.records,
+      studentName
+    });
   } catch (err) {
     console.error(err.message);
     res.status(500).json({ message: 'Failed to load results' });
