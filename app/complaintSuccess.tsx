@@ -3,66 +3,131 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
+  SafeAreaView,
+  StatusBar,
 } from 'react-native';
-import { logout } from '../utils/auth';
+import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 
 export default function ComplaintSuccess() {
+  const router = useRouter();
+
   return (
-    <View style={styles.container}>
-      <View style={styles.card}>
-        <Text style={styles.icon}>✅</Text>
-        <Text style={styles.title}>Complaint Submitted</Text>
+    <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="dark-content" />
+      <View style={styles.content}>
+        <View style={styles.successCircle}>
+          <View style={styles.innerCircle}>
+            <Ionicons name="checkmark-done" size={60} color="#ffffff" />
+          </View>
+        </View>
+
+        <Text style={styles.title}>Submission Successful</Text>
         <Text style={styles.subtitle}>
-          The manager has been notified and will review it shortly.
+          Your complaint has been logged securely. The administration will review the details and take necessary action.
         </Text>
 
-        <TouchableOpacity style={styles.button} onPress={logout}>
-          <Text style={styles.buttonText}>LOGOUT</Text>
+        <View style={styles.infoBox}>
+          <Ionicons name="information-circle" size={20} color="#6366f1" />
+          <Text style={styles.infoText}>
+            A copy of this report has also been saved to the school's digital records.
+          </Text>
+        </View>
+
+        <TouchableOpacity
+          activeOpacity={0.8}
+          style={styles.button}
+          onPress={() => router.replace('/teacherHome')}
+        >
+          <Text style={styles.buttonText}>BACK TO DASHBOARD</Text>
+          <Ionicons name="home" size={18} color="#ffffff" style={{ marginLeft: 8 }} />
         </TouchableOpacity>
       </View>
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  container: { flex: 1, backgroundColor: '#ffffff' },
+  content: {
     flex: 1,
-    backgroundColor: '#f5f7fb',
     justifyContent: 'center',
-    padding: 20,
-  },
-  card: {
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    padding: 30,
     alignItems: 'center',
-    elevation: 3,
+    paddingHorizontal: 40,
   },
-  icon: {
-    fontSize: 48,
-    marginBottom: 10,
+  successCircle: {
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    backgroundColor: '#f5f7ff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 32,
+  },
+  innerCircle: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: '#6366f1',
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 8,
+    shadowColor: '#6366f1',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
   },
   title: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#1f2937',
+    fontSize: 26,
+    fontWeight: '800',
+    color: '#1e293b',
+    textAlign: 'center',
   },
   subtitle: {
-    fontSize: 14,
-    color: '#6b7280',
-    marginTop: 10,
+    fontSize: 15,
+    color: '#64748b',
+    marginTop: 12,
     textAlign: 'center',
-    marginBottom: 30,
+    lineHeight: 22,
+    fontWeight: '500',
+  },
+  infoBox: {
+    flexDirection: 'row',
+    backgroundColor: '#f8fafc',
+    padding: 16,
+    borderRadius: 20,
+    marginTop: 40,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
+  },
+  infoText: {
+    flex: 1,
+    marginLeft: 12,
+    fontSize: 13,
+    color: '#64748b',
+    fontWeight: '600',
   },
   button: {
-    backgroundColor: '#2563eb',
-    paddingVertical: 14,
-    paddingHorizontal: 40,
-    borderRadius: 10,
+    backgroundColor: '#6366f1',
+    flexDirection: 'row',
+    height: 56,
+    paddingHorizontal: 32,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 48,
+    width: '100%',
+    elevation: 4,
+    shadowColor: '#6366f1',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
   },
   buttonText: {
     color: '#ffffff',
-    fontSize: 15,
-    fontWeight: '600',
+    fontSize: 16,
+    fontWeight: '800',
+    letterSpacing: 0.5,
   },
 });

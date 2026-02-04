@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   SafeAreaView,
   StatusBar,
+  Platform,
 } from 'react-native';
 import { useEffect, useMemo, useState } from 'react';
 import api from '../services/api';
@@ -270,6 +271,7 @@ const styles = StyleSheet.create({
   maxText: { fontSize: 12, color: '#94a3b8', marginTop: 2 },
   footer: {
     padding: 20,
+    paddingBottom: Platform.OS === 'ios' ? 40 : 30, // 🔥 FIX: Add bottom padding
     backgroundColor: '#ffffff',
     borderTopWidth: 1,
     borderTopColor: '#f1f5f9',

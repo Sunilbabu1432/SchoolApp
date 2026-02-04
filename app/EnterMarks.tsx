@@ -7,10 +7,16 @@ import {
   Modal,
   FlatList,
   Alert,
+  SafeAreaView,
+  StatusBar,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import api from '../services/api';
+import { Ionicons } from '@expo/vector-icons';
 
 /* =======================
    PICKLIST VALUES
@@ -18,14 +24,7 @@ import api from '../services/api';
 
 // ⚠️ Subject values must match Salesforce
 const SUBJECTS = [
-  'Maths',
-  'Science',
-  'English',
-  'Telugu',
-  'Hindi',
-  'Social',
-  'Computer',
-  'PET',
+  'Maths', 'Science', 'English', 'Telugu', 'Hindi', 'Social', 'Computer', 'PET',
 ];
 
 // ⚠️ UI label → Salesforce VALUE mapping
@@ -64,9 +63,9 @@ export default function EnterMarks() {
     try {
       await api.post('/marks', {
         studentId: String(studentId),
-        className: String(className),   // ✅ readonly
+        className: String(className),
         subject,
-        examType: exam.value,           // ✅ Salesforce-safe value
+        examType: exam.value,
         marks: Number(marks),
         maxMarks: Number(maxMarks),
       });
@@ -74,7 +73,6 @@ export default function EnterMarks() {
       Alert.alert('Success', 'Marks submitted successfully');
       router.back();
     } catch (err: any) {
-      console.log('❌ MARK SUBMIT ERROR', err?.response?.data || err.message);
       Alert.alert('Error', 'Failed to submit marks');
     }
   };
@@ -89,29 +87,36 @@ export default function EnterMarks() {
     isExam = false
   ) => (
     <Modal transparent animationType="fade">
-      <View style={styles.overlay}>
-        <View style={styles.dropdown}>
+      <View style={styles.modalOverlay}>
+        <View style={styles.pickerBox}>
+          <View style={styles.pickerHeader}>
+            <Text style={styles.pickerTitle}>
+              Select {isExam ? 'Exam Type' : 'Subject'}
+            </Text>
+            <TouchableOpacity onPress={() => setPicker(null)}>
+              <Ionicons name="close" size={24} color="#64748b" />
+            </TouchableOpacity>
+          </View>
           <FlatList
             data={data}
             keyExtractor={(item) => (isExam ? item.value : item)}
+            contentContainerStyle={styles.pickerList}
             renderItem={({ item }) => {
               const label = isExam ? item.label : item;
-              const active = isExam
-                ? selected?.value === item.value
-                : selected === item;
+              const active = isExam ? selected?.value === item.value : selected === item;
 
               return (
                 <TouchableOpacity
-                  style={[styles.option, active && styles.optionActive]}
+                  style={[styles.pickerOption, active && styles.pickerActive]}
                   onPress={() => {
                     onSelect(item);
                     setPicker(null);
                   }}
                 >
-                  <Text style={[styles.optionText, active && styles.activeText]}>
+                  <Text style={[styles.pickerText, active && styles.pickerTextActive]}>
                     {label}
                   </Text>
-                  {active && <Text>✔</Text>}
+                  {active && <Ionicons name="checkmark-circle" size={22} color="#6366f1" />}
                 </TouchableOpacity>
               );
             }}
@@ -122,55 +127,97 @@ export default function EnterMarks() {
   );
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Enter Marks</Text>
-      <Text style={styles.subTitle}>{studentName}</Text>
+    <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="light-content" />
 
-      {/* CLASS – READ ONLY */}
-      <View style={[styles.input, styles.readonly]}>
-        <Text style={{ color: '#111' }}>{className}</Text>
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+          <Ionicons name="arrow-back" size={24} color="#ffffff" />
+        </TouchableOpacity>
+        <View style={styles.headerTitleContainer}>
+          <Text style={styles.headerLabel}>SCORE ENTRY</Text>
+          <Text style={styles.headerTitle}>{studentName}</Text>
+        </View>
       </View>
 
-      {/* SUBJECT */}
-      <TouchableOpacity style={styles.input} onPress={() => setPicker('subject')}>
-        <Text style={{ color: subject ? '#111' : '#9ca3af' }}>
-          {subject || 'Select Subject'}
-        </Text>
-      </TouchableOpacity>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <ScrollView contentContainerStyle={styles.scroll}>
+          <View style={styles.infoBadge}>
+            <Ionicons name="school" size={18} color="#6366f1" />
+            <Text style={styles.infoText}>{className}</Text>
+          </View>
 
-      {/* EXAM */}
-      <TouchableOpacity style={styles.input} onPress={() => setPicker('exam')}>
-        <Text style={{ color: exam ? '#111' : '#9ca3af' }}>
-          {exam?.label || 'Select Exam Type'}
-        </Text>
-      </TouchableOpacity>
+          <View style={styles.form}>
+            {/* SUBJECT */}
+            <Text style={styles.label}>Academic Subject</Text>
+            <TouchableOpacity
+              style={[styles.inputContainer, subject ? styles.inputActive : null]}
+              onPress={() => setPicker('subject')}
+            >
+              <Ionicons name="book-outline" size={22} color={subject ? "#6366f1" : "#94a3b8"} />
+              <Text style={[styles.inputValue, !subject && styles.placeholder]}>
+                {subject || 'Select Subject'}
+              </Text>
+              <Ionicons name="chevron-down" size={18} color="#94a3b8" />
+            </TouchableOpacity>
 
-      {/* MARKS */}
-      <TextInput
-        style={styles.input}
-        placeholder="Marks Obtained"
-        keyboardType="numeric"
-        value={marks}
-        onChangeText={setMarks}
-      />
+            {/* EXAM TYPE */}
+            <Text style={styles.label}>Exam Type</Text>
+            <TouchableOpacity
+              style={[styles.inputContainer, exam ? styles.inputActive : null]}
+              onPress={() => setPicker('exam')}
+            >
+              <Ionicons name="calendar-outline" size={22} color={exam ? "#6366f1" : "#94a3b8"} />
+              <Text style={[styles.inputValue, !exam && styles.placeholder]}>
+                {exam?.label || 'Select Exam Type'}
+              </Text>
+              <Ionicons name="chevron-down" size={18} color="#94a3b8" />
+            </TouchableOpacity>
 
-      <TextInput
-        style={styles.input}
-        placeholder="Max Marks"
-        keyboardType="numeric"
-        value={maxMarks}
-        onChangeText={setMaxMarks}
-      />
+            {/* SCORES ROW */}
+            <View style={styles.row}>
+              <View style={{ flex: 1, marginRight: 12 }}>
+                <Text style={styles.label}>Marks Obtained</Text>
+                <View style={styles.inputContainer}>
+                  <Ionicons name="star-outline" size={22} color="#94a3b8" />
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="E.g. 85"
+                    keyboardType="numeric"
+                    value={marks}
+                    onChangeText={setMarks}
+                  />
+                </View>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.label}>Max Marks</Text>
+                <View style={styles.inputContainer}>
+                  <Ionicons name="medal-outline" size={22} color="#94a3b8" />
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="E.g. 100"
+                    keyboardType="numeric"
+                    value={maxMarks}
+                    onChangeText={setMaxMarks}
+                  />
+                </View>
+              </View>
+            </View>
 
-      {/* SUBMIT */}
-      <TouchableOpacity style={styles.submit} onPress={submitMarks}>
-        <Text style={styles.submitText}>Submit Marks</Text>
-      </TouchableOpacity>
+            <TouchableOpacity style={styles.submitBtn} onPress={submitMarks}>
+              <Text style={styles.submitText}>Submit Report</Text>
+              <Ionicons name="send" size={18} color="#ffffff" style={{ marginLeft: 8 }} />
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
 
-      {/* PICKERS */}
       {picker === 'subject' && renderPicker(SUBJECTS, subject, setSubject)}
       {picker === 'exam' && renderPicker(EXAMS, exam, setExam, true)}
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -178,33 +225,103 @@ export default function EnterMarks() {
    STYLES
 ======================= */
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f7fb', padding: 20 },
-  title: { fontSize: 22, fontWeight: '700', textAlign: 'center' },
-  subTitle: { textAlign: 'center', marginBottom: 20, color: '#6b7280' },
-  input: { backgroundColor: '#fff', padding: 14, borderRadius: 10, marginBottom: 12 },
-  readonly: { backgroundColor: '#e5e7eb' },
-  submit: { backgroundColor: '#2563eb', padding: 16, borderRadius: 12, marginTop: 10 },
-  submitText: { color: '#fff', textAlign: 'center', fontWeight: '600', fontSize: 16 },
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.25)',
-    justifyContent: 'flex-start',
-    paddingTop: 140,
+  container: { flex: 1, backgroundColor: '#f8fafc' },
+  header: {
+    backgroundColor: '#6366f1',
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 24,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
   },
-  dropdown: {
-    backgroundColor: '#fff',
-    marginHorizontal: 20,
+  backBtn: {
+    width: 40,
+    height: 40,
     borderRadius: 12,
-    maxHeight: 320,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
   },
-  option: {
-    padding: 14,
-    borderBottomWidth: 0.5,
-    borderColor: '#e5e7eb',
+  headerTitleContainer: { flex: 1 },
+  headerLabel: { fontSize: 11, color: '#c7d2fe', fontWeight: '800', letterSpacing: 1 },
+  headerTitle: { fontSize: 20, color: '#ffffff', fontWeight: '700', marginTop: 2 },
+  scroll: { padding: 24 },
+  infoBadge: {
+    flexDirection: 'row',
+    backgroundColor: '#eef2ff',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 12,
+    alignSelf: 'flex-start',
+    alignItems: 'center',
+    marginBottom: 32,
+  },
+  infoText: { color: '#6366f1', fontWeight: '700', marginLeft: 8 },
+  form: {},
+  label: { fontSize: 13, fontWeight: '700', color: '#64748b', marginBottom: 8, marginLeft: 4 },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    height: 60,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: '#e2e8f0',
+    paddingHorizontal: 16,
+    marginBottom: 24,
+  },
+  inputActive: { borderColor: '#6366f1', backgroundColor: '#f5f7ff' },
+  inputValue: { flex: 1, fontSize: 16, color: '#1e293b', fontWeight: '600', marginLeft: 12 },
+  textInput: { flex: 1, fontSize: 16, color: '#1e293b', fontWeight: '600', marginLeft: 12 },
+  placeholder: { color: '#94a3b8' },
+  row: { flexDirection: 'row' },
+  submitBtn: {
+    backgroundColor: '#6366f1',
+    height: 60,
+    borderRadius: 18,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 12,
+    elevation: 8,
+    shadowColor: '#6366f1',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 15,
+  },
+  submitText: { color: '#ffffff', fontSize: 18, fontWeight: '700' },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.4)',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  pickerBox: {
+    backgroundColor: '#ffffff',
+    borderRadius: 24,
+    padding: 24,
+    maxHeight: '70%',
+  },
+  pickerHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
   },
-  optionActive: { backgroundColor: '#ecfdf5' },
-  optionText: { fontSize: 15 },
-  activeText: { color: '#16a34a', fontWeight: '700' },
+  pickerTitle: { fontSize: 18, fontWeight: '800', color: '#1e293b' },
+  pickerList: { paddingBottom: 10 },
+  pickerOption: {
+    paddingVertical: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderColor: '#f1f5f9',
+  },
+  pickerActive: { backgroundColor: '#f5f7ff', borderRadius: 12, paddingHorizontal: 12, marginHorizontal: -12 },
+  pickerText: { fontSize: 16, color: '#475569', fontWeight: '600' },
+  pickerTextActive: { color: '#6366f1', fontWeight: '700' },
 });
