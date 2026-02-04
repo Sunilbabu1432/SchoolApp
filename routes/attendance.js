@@ -23,6 +23,14 @@ function escapeSOQL(value) {
         .replace(/%/g, "\\%");
 }
 
+/**
+ * Normalizes a custom field name to its relationship name (e.g., __c to __r)
+ */
+function toRel(field) {
+    if (!field) return field;
+    return field.endsWith('__c') ? field.replace(/__c$/, '__r') : field;
+}
+
 async function resolveSchema(conn) {
     const CACHE_TTL = 30 * 60 * 1000;
     if (schemaCache.ts && Date.now() - schemaCache.ts < CACHE_TTL) return schemaCache;
@@ -125,13 +133,14 @@ router.get('/students', async (req, res) => {
 
             // Fetch Session
             if (ses.class && ses.date) {
-                let sesSoql = `SELECT Id, ${ses.teacher ? ses.teacher + '.Name' : 'Id'} FROM Attendance_Session__c 
+                const teacherRel = toRel(ses.teacher);
+                let sesSoql = `SELECT Id, ${teacherRel ? teacherRel + '.Name' : 'Id'} FROM Attendance_Session__c 
                                WHERE ${ses.class} = '${escapeSOQL(classValue)}' AND ${ses.date} = '${dateLiteral}'`;
                 if (sectionValue && ses.section) sesSoql += ` AND ${ses.section} = '${escapeSOQL(sectionValue)}'`;
                 const sesRes = await conn.query(sesSoql + " LIMIT 1");
                 if (sesRes.records.length > 0) {
                     const s = sesRes.records[0];
-                    sessionInfo = { id: s.Id, takenBy: s[ses.teacher] ? (s[ses.teacher].Name || s[ses.teacher]) : "Unknown" };
+                    sessionInfo = { id: s.Id, takenBy: s[teacherRel] ? (s[teacherRel].Name || s[ses.teacher]) : "Unknown" };
                 }
             }
         }
