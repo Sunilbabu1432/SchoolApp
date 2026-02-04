@@ -2,37 +2,40 @@
   "expo": {
     "name": "School App",
     "slug": "mobile",
+    "scheme": "schoolapp",
     "version": "1.0.0",
     "orientation": "portrait",
-    "scheme": "mobile",
-
     "icon": "./assets/images/icon.png",
-
     "splash": {
       "image": "./assets/images/splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#FFFFFF"
     },
-
     "android": {
       "package": "com.svihaanraj1432.mobile",
-      "googleServicesFile": "./google-services.json",
-
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/images/icon.png",
-        "backgroundColor": "#FFFFFF"
-      }
+      "googleServicesFile": "./google-services.json"
     },
-
-    "plugins": ["expo-router"],
-
+    "plugins": [
+      "expo-router",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true,
+            "compileSdkVersion": 35,
+            "targetSdkVersion": 35,
+            "buildToolsVersion": "35.0.0"
+          }
+        }
+      ],
+      "@react-native-community/datetimepicker"
+    ],
     "extra": {
       "router": {},
       "eas": {
         "projectId": "9e80c7a9-32ce-4f2d-abeb-a09c4a00b7a5"
       }
     },
-
     "owner": "sakibanda1432"
   }
 }

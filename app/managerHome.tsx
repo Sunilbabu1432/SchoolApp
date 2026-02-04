@@ -24,63 +24,76 @@ export default function ManagerHome() {
     saveManagerToken();
   }, []);
 
-  // ✅ Notification listeners (NO CHANGE)
+  // ✅ Notification listeners (SAFE)
   useEffect(() => {
-    const unsubscribe = messaging().onNotificationOpenedApp(msg => {
-      const d = msg?.data;
+    let unsubscribe = () => { };
+    try {
+      unsubscribe = messaging().onNotificationOpenedApp(msg => {
+        const d = msg?.data;
 
-      if (d?.type === 'CASE' && d?.caseId) {
-        setLatestCase({
-          caseId: String(d.caseId),
-          subject: String(d.subject ?? ''),
-        });
+        if (d?.type === 'CASE' && d?.caseId) {
+          setLatestCase({
+            caseId: String(d.caseId),
+            subject: String(d.subject ?? ''),
+          });
 
-        router.push({
-          pathname: '/managerComplaints',
-          params: { caseId: String(d.caseId) },
-        });
-      }
+          router.push({
+            pathname: '/managerComplaints',
+            params: { caseId: String(d.caseId) },
+          });
+        }
 
-      if (d?.type === 'MARKS' && d?.markId) {
-        router.push({
-          pathname: '/managerMarkDetails',
-          params: { markId: String(d.markId) },
-        });
-      }
-    });
+        if (d?.type === 'MARKS' && d?.markId) {
+          router.push({
+            pathname: '/managerMarkDetails',
+            params: { markId: String(d.markId) },
+          });
+        }
+      });
 
-    messaging().getInitialNotification().then(msg => {
-      const d = msg?.data;
+      messaging()
+        .getInitialNotification()
+        .then(msg => {
+          const d = msg?.data;
 
-      if (d?.type === 'CASE' && d?.caseId) {
-        setLatestCase({
-          caseId: String(d.caseId),
-          subject: String(d.subject ?? ''),
-        });
+          if (d?.type === 'CASE' && d?.caseId) {
+            setLatestCase({
+              caseId: String(d.caseId),
+              subject: String(d.subject ?? ''),
+            });
 
-        router.push({
-          pathname: '/managerComplaints',
-          params: { caseId: String(d.caseId) },
-        });
-      }
+            router.push({
+              pathname: '/managerComplaints',
+              params: { caseId: String(d.caseId) },
+            });
+          }
 
-      if (d?.type === 'MARKS' && d?.markId) {
-        router.push({
-          pathname: '/managerMarkDetails',
-          params: { markId: String(d.markId) },
-        });
-      }
-    });
+          if (d?.type === 'MARKS' && d?.markId) {
+            router.push({
+              pathname: '/managerMarkDetails',
+              params: { markId: String(d.markId) },
+            });
+          }
+        })
+        .catch(err => console.log('Init notification failed', err));
+    } catch (e) {
+      console.log('Messaging setup failed', e);
+    }
 
-    return unsubscribe;
+    return () => {
+      try {
+        unsubscribe();
+      } catch { }
+    };
   }, []);
 
   const saveManagerToken = async () => {
     try {
+      await messaging().requestPermission();
       const token = await messaging().getToken();
       await api.post('/save-token', { token });
-    } catch {
-      console.log('Manager token save failed');
+    } catch (err) {
+      console.log('Manager token save failed', err);
     }
   };
 

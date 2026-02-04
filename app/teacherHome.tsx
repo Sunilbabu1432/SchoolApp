@@ -12,6 +12,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
 import api from '../services/api';
 import messaging from '@react-native-firebase/messaging';
+import AsyncStorage from '@react-native-async-storage/async-storage'; // ✅ ADD
 
 export default function TeacherHome() {
   const router = useRouter();
@@ -19,69 +20,75 @@ export default function TeacherHome() {
   const [loading, setLoading] = useState(true);
   const [showDropdown, setShowDropdown] = useState(false);
   const [selectedClass, setSelectedClass] = useState<string | null>(null);
+  const [teacherName, setTeacherName] = useState(''); // ✅ ADD
 
   const classes = [
-    'Nursery',
-    'LKG',
-    'UKG',
-    'Class-1',
-    'Class-2',
-    'Class-3',
-    'Class-4',
-    'Class-5',
-    'Class-6',
-    'Class-7',
-    'Class-8',
-    'Class-9',
-    'Class-10',
+    'Nursery','LKG','UKG','Class-1','Class-2','Class-3',
+    'Class-4','Class-5','Class-6','Class-7','Class-8',
+    'Class-9','Class-10',
   ];
 
-  // ✅ SAVE TEACHER FCM TOKEN (NO CHANGE)
+  // ✅ SAVE TEACHER FCM TOKEN (UNCHANGED)
   const saveTeacherFcmToken = async () => {
     try {
+      await messaging().requestPermission();
       const token = await messaging().getToken();
       await api.post('/save-token', { token });
-    } catch {
-      console.log('❌ Teacher token save failed');
+    } catch (err) {
+      console.log('❌ Teacher token save failed', err);
     }
   };
 
   // ✅ INITIAL LOAD
   useEffect(() => {
+    const loadUser = async () => {
+      const user = await AsyncStorage.getItem('user');
+      if (user) {
+        const parsed = JSON.parse(user);
+        setTeacherName(parsed.name); // ✅ NAME SET
+      }
+    };
+
+    loadUser();
     saveTeacherFcmToken();
     setLoading(false);
   }, []);
 
-  // 🔔 NOTIFICATION HANDLING (NO CHANGE)
+  // 🔔 NOTIFICATION HANDLING (UNCHANGED)
   useEffect(() => {
-    const unsub = messaging().onNotificationOpenedApp(msg => {
-      if (msg?.data?.caseId) {
-        router.push({
-          pathname: '/managerComplaints',
-          params: { caseId: String(msg.data.caseId) },
-        });
-      }
-    });
+    let unsub = () => {};
+    let fg = () => {};
 
-    messaging().getInitialNotification().then(msg => {
-      if (msg?.data?.caseId) {
-        router.push({
-          pathname: '/managerComplaints',
-          params: { caseId: String(msg.data.caseId) },
-        });
-      }
-    });
+    try {
+      unsub = messaging().onNotificationOpenedApp(msg => {
+        if (msg?.data?.caseId) {
+          router.push({
+            pathname: '/managerComplaints',
+            params: { caseId: String(msg.data.caseId) },
+          });
+        }
+      });
 
-    const fg = messaging().onMessage(async msg => {
-      Alert.alert(
-        msg.notification?.title || 'Message',
-        msg.notification?.body || ''
-      );
-    });
+      messaging().getInitialNotification().then(msg => {
+        if (msg?.data?.caseId) {
+          router.push({
+            pathname: '/managerComplaints',
+            params: { caseId: String(msg.data.caseId) },
+          });
+        }
+      });
+
+      fg = messaging().onMessage(async msg => {
+        Alert.alert(
+          msg.notification?.title || 'Message',
+          msg.notification?.body || ''
+        );
+      });
+    } catch {}
 
     return () => {
-      unsub();
-      fg();
+      try { unsub(); } catch {}
+      try { fg(); } catch {}
     };
   }, []);
 
@@ -96,10 +103,12 @@ export default function TeacherHome() {
 
   return (
     <View style={styles.container}>
-      {/* 🔝 TOP SECTION */}
-      <Text style={styles.title}>Select Class</Text>
 
-      {/* 🔽 DROPDOWN */}
+      {/* ✅ WELCOME NAME */}
+      <Text style={styles.welcome}>Welcome, {teacherName}</Text>
+
+      <Text style={styles.title}>Select Class (View Students)</Text>
+
       <TouchableOpacity
         style={styles.dropdown}
         onPress={() => setShowDropdown(true)}
@@ -110,7 +119,6 @@ export default function TeacherHome() {
         <Text style={styles.arrow}>▼</Text>
       </TouchableOpacity>
 
-      {/* 📦 DROPDOWN MODAL */}
       <Modal visible={showDropdown} transparent animationType="slide">
         <View style={styles.overlay}>
           <View style={styles.modalBox}>
@@ -125,8 +133,6 @@ export default function TeacherHome() {
                   onPress={() => {
                     setSelectedClass(item);
                     setShowDropdown(false);
-
-                    // 👉 CLASS SELECT → STUDENTS SCREEN
                     router.push({
                       pathname: '/TeachersStudents',
                       params: { className: item },
@@ -145,16 +151,9 @@ export default function TeacherHome() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f5f7fb',
-    padding: 20,
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: '700',
-    marginBottom: 12,
-  },
+  container: { flex: 1, backgroundColor: '#f5f7fb', padding: 20 },
+  welcome: { fontSize: 18, fontWeight: '700', marginBottom: 6 },
+  title: { fontSize: 22, fontWeight: '700', marginBottom: 12 },
   dropdown: {
     backgroundColor: '#ecfdf5',
     borderWidth: 2,
@@ -166,17 +165,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 20,
   },
-  dropdownText: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  arrow: {
-    fontSize: 16,
-  },
+  dropdownText: { fontSize: 16, fontWeight: '600' },
+  arrow: { fontSize: 16 },
   overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.3)',
-    justifyContent: 'flex-end',
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'flex-end',
   },
   modalBox: {
     backgroundColor: '#fff',
@@ -185,24 +177,8 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 20,
     maxHeight: '70%',
   },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    textAlign: 'center',
-    marginBottom: 16,
-  },
-  option: {
-    padding: 16,
-    borderBottomWidth: 1,
-    borderColor: '#e5e7eb',
-  },
-  optionText: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  center: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+  modalTitle: { fontSize: 18, fontWeight: '700', textAlign: 'center', marginBottom: 16 },
+  option: { padding: 16, borderBottomWidth: 1, borderColor: '#e5e7eb' },
+  optionText: { fontSize: 16, fontWeight: '600' },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 });

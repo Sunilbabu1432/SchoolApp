@@ -8,21 +8,30 @@ import {
 } from 'react-native';
 import { useEffect, useMemo, useState } from 'react';
 import api from '../services/api';
+import AsyncStorage from '@react-native-async-storage/async-storage'; // ✅ ADD
 
 export default function ParentHome() {
   const [results, setResults] = useState<any[]>([]);
   const [studentName, setStudentName] = useState('');
+  const [parentName, setParentName] = useState(''); // ✅ ADD
   const [loading, setLoading] = useState(true);
   const [selectedExam, setSelectedExam] = useState<string | null>(null);
 
   useEffect(() => {
+    const loadUser = async () => {
+      const user = await AsyncStorage.getItem('user');
+      if (user) {
+        setParentName(JSON.parse(user).name); // ✅ NAME SET
+      }
+    };
+
+    loadUser();
     loadResults();
   }, []);
 
   const loadResults = async () => {
     try {
       const res = await api.get('/marks/parent/results');
-
       const data = res.data.results || [];
       setResults(data);
       setStudentName(res.data.studentName || '');
@@ -37,17 +46,16 @@ export default function ParentHome() {
     }
   };
 
-  // 🧠 Unique exams
-  const exams = useMemo(() => {
-    return [...new Set(results.map(r => r.Exam_Type__c))];
-  }, [results]);
+  const exams = useMemo(
+    () => [...new Set(results.map(r => r.Exam_Type__c))],
+    [results]
+  );
 
-  // 🎯 Filtered results
-  const examResults = useMemo(() => {
-    return results.filter(r => r.Exam_Type__c === selectedExam);
-  }, [results, selectedExam]);
+  const examResults = useMemo(
+    () => results.filter(r => r.Exam_Type__c === selectedExam),
+    [results, selectedExam]
+  );
 
-  // 🔢 Aggregate
   const aggregate = useMemo(() => {
     const total = examResults.reduce((s, r) => s + r.Marks__c, 0);
     const max = examResults.reduce((s, r) => s + r.Max_Marks__c, 0);
@@ -66,15 +74,15 @@ export default function ParentHome() {
 
   return (
     <View style={styles.container}>
-      {/* 🔵 Student Header */}
+
       <View style={styles.header}>
         <Text style={styles.studentName}>{studentName}</Text>
+        <Text style={styles.parentName}>Welcome, {parentName}</Text>
         <Text style={styles.classText}>
           Class: {examResults[0]?.Class__c}
         </Text>
       </View>
 
-      {/* 🔘 Exam Selector */}
       <View style={styles.examRow}>
         {exams.map(exam => (
           <TouchableOpacity
@@ -97,7 +105,6 @@ export default function ParentHome() {
         ))}
       </View>
 
-      {/* 📋 Subject Marks */}
       <FlatList
         data={examResults}
         keyExtractor={item => item.Id}
@@ -111,7 +118,6 @@ export default function ParentHome() {
         )}
       />
 
-      {/* 🧮 Aggregate */}
       <View style={styles.footer}>
         <Text style={styles.total}>
           Total: {aggregate.total} / {aggregate.max}
@@ -126,29 +132,16 @@ export default function ParentHome() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f7fb', padding: 16 },
-
   header: {
     backgroundColor: '#2563eb',
     padding: 18,
     borderRadius: 18,
     marginBottom: 14,
   },
-  studentName: {
-    color: '#fff',
-    fontSize: 22,
-    fontWeight: '800',
-  },
-  classText: {
-    color: '#dbeafe',
-    fontSize: 14,
-    marginTop: 4,
-  },
-
-  examRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginBottom: 14,
-  },
+  studentName: { color: '#fff', fontSize: 22, fontWeight: '800' },
+  parentName: { color: '#dbeafe', marginTop: 4 },
+  classText: { color: '#dbeafe', fontSize: 14, marginTop: 4 },
+  examRow: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 14 },
   examBtn: {
     paddingVertical: 8,
     paddingHorizontal: 14,
@@ -160,7 +153,6 @@ const styles = StyleSheet.create({
   examActive: { backgroundColor: '#2563eb' },
   examText: { color: '#111827', fontWeight: '600' },
   examTextActive: { color: '#fff' },
-
   card: {
     backgroundColor: '#fff',
     padding: 16,
@@ -171,7 +163,6 @@ const styles = StyleSheet.create({
   },
   subject: { fontSize: 16, fontWeight: '600' },
   marks: { fontSize: 16, fontWeight: '700', color: '#16a34a' },
-
   footer: {
     backgroundColor: '#111827',
     padding: 16,
@@ -180,6 +171,5 @@ const styles = StyleSheet.create({
   },
   total: { color: '#fff', fontSize: 18, fontWeight: '700' },
   percent: { color: '#22c55e', fontSize: 16, marginTop: 4 },
-
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 });

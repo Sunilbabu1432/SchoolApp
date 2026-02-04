@@ -20,15 +20,28 @@ export default function Login() {
   // ✅ SAVE FCM TOKEN (COMMON FOR ALL ROLES)
   const saveFcmToken = async (authToken: string) => {
     try {
-      // set auth header before calling save-token
+      // 1. Request Permission (Android 13+)
+      const authStatus = await messaging().requestPermission();
+      const enabled =
+        authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
+        authStatus === messaging.AuthorizationStatus.PROVISIONAL;
+
+      if (!enabled) {
+        console.log('Authorization status:', authStatus);
+        return;
+      }
+
+      // set auth header
       api.defaults.headers.common.Authorization = `Bearer ${authToken}`;
 
+      // 2. Get Token
       const token = await messaging().getToken();
       await api.post('/save-token', { token });
 
       console.log('✅ FCM token saved');
     } catch (err) {
       console.log('❌ FCM token save failed', err);
+      // Do not rethrow, let the user proceed
     }
   };
 
@@ -40,7 +53,18 @@ export default function Login() {
       await AsyncStorage.setItem('token', res.data.token);
 
       // 🔥 SAVE FCM TOKEN (Teacher / Manager / Parent)
+      // We await this, but we caught errors inside, so it won't block navigation if it fails
       await saveFcmToken(res.data.token);
+
+      // ✅ SAVE USER INFO (ADD ONLY)
+await AsyncStorage.setItem(
+  'user',
+  JSON.stringify({
+    name: res.data.name,   // 👈 backend nunchi ravali
+    role: res.data.role,
+  })
+);
+
 
       const role = res.data.role;
 
@@ -54,9 +78,20 @@ export default function Login() {
         alert('Unknown role');
       }
 
-    } catch (err) {
-      console.log('LOGIN FAILED', err);
-      alert('Login failed');
+    } catch (err: any) {
+      console.error('LOGIN FAILED', err);
+      // Detailed error logging
+      if (err.response) {
+        console.error('Response data:', err.response.data);
+        console.error('Response status:', err.response.status);
+      } else if (err.request) {
+        console.error('No response received:', err.request);
+      } else {
+        console.error('Error config:', err.message);
+      }
+
+      const msg = err.response?.data?.message || err.message || 'Login failed';
+      alert(`Login Failed: ${msg}`);
     }
   };
 
