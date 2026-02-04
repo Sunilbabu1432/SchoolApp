@@ -15,13 +15,32 @@ let schemaCache = {
     ts: 0
 };
 
+function escapeSOQL(value) {
+    if (value == null) return "";
+    return String(value)
+        .replace(/\\/g, "\\\\")
+        .replace(/'/g, "\\'")
+        .replace(/%/g, "\\%");
+}
+
 async function resolveSchema(conn) {
     const CACHE_TTL = 30 * 60 * 1000;
     if (schemaCache.ts && Date.now() - schemaCache.ts < CACHE_TTL) return schemaCache;
 
     const findField = (fields, candidates) => {
         candidates = candidates.map(c => c.toLowerCase());
-        let f = fields.find(fld => fld.label && candidates.includes(fld.label.toLowerCase()));
+        // 1. Exact match (normalize __c)
+        let f = fields.find(fld =>
+            (fld.label && candidates.includes(fld.label.toLowerCase())) ||
+            (fld.name && candidates.includes(fld.name.toLowerCase())) ||
+            (fld.name && candidates.includes(fld.name.toLowerCase().replace('__c', '')))
+        );
+        // 2. Custom field substring match
+        if (!f) f = fields.find(fld =>
+            fld.name && fld.name.endsWith('__c') &&
+            candidates.some(c => fld.name.toLowerCase().includes(c))
+        );
+        // 3. Any substring match
         if (!f) f = fields.find(fld => fld.name && candidates.some(c => fld.name.toLowerCase().includes(c)));
         return f ? f.name : null;
     };
