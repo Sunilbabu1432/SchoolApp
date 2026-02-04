@@ -70,15 +70,23 @@ export default function PublishResults() {
       setLoading(true);
       setSuccessMsg('');
 
+      console.log('🚀 Sending Schedule Request:', {
+        examType,
+        className,
+        publishAt: publishAt.toISOString(),
+      });
+
       const res = await api.post('/marks/schedule-publish', {
         examType,
         className,
         publishAt: publishAt.toISOString(), // ✅ correct
       });
 
+      console.log('✅ Schedule Success:', res.data);
+
 
       setSuccessMsg(
-        `⏰ Scheduled Successfully\nRecords: ${res.data.scheduledCount}`
+        `✅ ${className} results scheduled successfully.\nParents will be notified at the set time.`
       );
     } catch (err: any) {
       const serverMsg = err.response?.data?.message;
