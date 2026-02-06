@@ -10,7 +10,7 @@ module.exports = (req, res, next) => {
   const token = authHeader.split(' ')[1];
 
   if (token) {
-    console.log(`🔓 Auth Check: ${req.method} ${req.path}`);
+    console.log(`🔓 Auth Check: ${req.method} ${req.path} | Token: ${token}`);
   }
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
