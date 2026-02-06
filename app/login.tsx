@@ -7,6 +7,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  Dimensions,
 } from 'react-native';
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
@@ -14,6 +15,9 @@ import api from '../services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import messaging from '@react-native-firebase/messaging';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+
+const { width } = Dimensions.get('window');
 
 export default function Login() {
   const [mobile, setMobile] = useState('');
@@ -48,7 +52,6 @@ export default function Login() {
     try {
       await api.post('/auth/request-otp', { mobile });
       setShowOtpInput(true);
-      alert('OTP sent successfully. Please check your console/device.');
     } catch (err: any) {
       const msg = err.response?.data?.message || err.message || 'Request failed';
       alert(`OTP Request Failed: ${msg}`);
@@ -88,161 +91,183 @@ export default function Login() {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.wrapper}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    <LinearGradient
+      colors={['#4f46e5', '#7c3aed']}
+      style={styles.container}
     >
-      <View style={styles.card}>
-        <View style={styles.iconWrapper}>
-          <View style={styles.iconCircle}>
-            <Ionicons name="person" size={40} color="#6366f1" />
+      <KeyboardAvoidingView
+        style={styles.wrapper}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <View style={styles.headerArea}>
+          <View style={styles.logoCircle}>
+            <Ionicons name="school" size={50} color="#ffffff" />
           </View>
+          <Text style={styles.appName}>SchoolApp</Text>
+          <Text style={styles.tagline}>Connected Education</Text>
         </View>
 
-        <Text style={styles.subtitle}>
-          {showOtpInput ? 'Enter the security code sent to you.' : 'Sign in to access your dashboard.'}
-        </Text>
+        <View style={styles.glassCard}>
+          <Text style={styles.cardTitle}>
+            {showOtpInput ? 'Verification' : 'Welcome Back'}
+          </Text>
+          <Text style={styles.subtitle}>
+            {showOtpInput
+              ? `Enter the 6-digit code sent to\n+91 ${mobile}`
+              : 'Enter your mobile number to get started'}
+          </Text>
 
-        <View style={styles.divider} />
+          {!showOtpInput ? (
+            <View style={styles.inputStack}>
+              <View style={styles.inputWrapper}>
+                <Ionicons name="call-outline" size={20} color="#6366f1" style={styles.inputIcon} />
+                <TextInput
+                  placeholder="Mobile Number"
+                  placeholderTextColor="#94a3b8"
+                  value={mobile}
+                  onChangeText={setMobile}
+                  keyboardType="phone-pad"
+                  maxLength={10}
+                  style={styles.input}
+                />
+              </View>
 
-        {!showOtpInput ? (
-          <>
-            <View style={styles.inputContainer}>
-              <Ionicons name="phone-portrait-outline" size={24} color="#6366f1" style={styles.inputIcon} />
-              <TextInput
-                placeholder="Mobile Number"
-                placeholderTextColor="#94a3b8"
-                value={mobile}
-                onChangeText={setMobile}
-                keyboardType="phone-pad"
-                style={styles.input}
-              />
+              <TouchableOpacity
+                style={[styles.primaryButton, (!isMobileReady || loading) && styles.buttonDisabled]}
+                onPress={handleRequestOtp}
+                activeOpacity={0.8}
+                disabled={loading || !isMobileReady}
+              >
+                {loading ? (
+                  <ActivityIndicator color="#ffffff" />
+                ) : (
+                  <View style={styles.btnContent}>
+                    <Text style={styles.buttonText}>Get OTP</Text>
+                    <Ionicons name="arrow-forward" size={20} color="#ffffff" />
+                  </View>
+                )}
+              </TouchableOpacity>
             </View>
+          ) : (
+            <View style={styles.inputStack}>
+              <View style={styles.inputWrapper}>
+                <Ionicons name="lock-closed-outline" size={20} color="#6366f1" style={styles.inputIcon} />
+                <TextInput
+                  placeholder="OTP Code"
+                  placeholderTextColor="#94a3b8"
+                  value={otp}
+                  onChangeText={setOtp}
+                  keyboardType="number-pad"
+                  maxLength={6}
+                  style={[styles.input, { letterSpacing: 8 }]}
+                />
+              </View>
 
-            <TouchableOpacity
-              style={[styles.button, (!isMobileReady || loading) && styles.buttonDisabled]}
-              onPress={handleRequestOtp}
-              activeOpacity={0.8}
-              disabled={loading || !isMobileReady}
-            >
-              {loading ? (
-                <ActivityIndicator color="#ffffff" />
-              ) : (
-                <Text style={styles.buttonText}>Get OTP</Text>
-              )}
-            </TouchableOpacity>
-          </>
-        ) : (
-          <>
-            <View style={styles.inputContainer}>
-              <Ionicons name="shield-checkmark-outline" size={24} color="#6366f1" style={styles.inputIcon} />
-              <TextInput
-                placeholder="Enter 6-digit OTP"
-                placeholderTextColor="#94a3b8"
-                value={otp}
-                onChangeText={setOtp}
-                keyboardType="number-pad"
-                maxLength={6}
-                style={styles.input}
-              />
+              <TouchableOpacity
+                style={[styles.primaryButton, (!isOtpReady || loading) && styles.buttonDisabled]}
+                onPress={handleVerifyOtp}
+                activeOpacity={0.8}
+                disabled={loading || !isOtpReady}
+              >
+                {loading ? (
+                  <ActivityIndicator color="#ffffff" />
+                ) : (
+                  <Text style={styles.buttonText}>Verify & Login</Text>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.linkButton}
+                onPress={() => {
+                  setShowOtpInput(false);
+                  setOtp('');
+                }}
+                disabled={loading}
+              >
+                <Text style={styles.linkText}>Changed mobile number?</Text>
+              </TouchableOpacity>
             </View>
+          )}
+        </View>
 
-            <TouchableOpacity
-              style={[styles.button, (!isOtpReady || loading) && styles.buttonDisabled]}
-              onPress={handleVerifyOtp}
-              activeOpacity={0.8}
-              disabled={loading || !isOtpReady}
-            >
-              {loading ? (
-                <ActivityIndicator color="#ffffff" />
-              ) : (
-                <Text style={styles.buttonText}>Verify & Login</Text>
-              )}
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.backButton}
-              onPress={() => {
-                setShowOtpInput(false);
-                setOtp('');
-              }}
-              disabled={loading}
-            >
-              <Text style={styles.backButtonText}>Back to login</Text>
-            </TouchableOpacity>
-          </>
-        )}
-      </View>
-    </KeyboardAvoidingView>
+        <View style={styles.footer}>
+          <Text style={styles.footerText}>Secure Login Powered by Salesforce</Text>
+        </View>
+      </KeyboardAvoidingView>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
   wrapper: {
     flex: 1,
-    backgroundColor: '#f8fafc',
-    justifyContent: 'center',
     padding: 24,
+    justifyContent: 'center',
   },
-  card: {
-    backgroundColor: '#ffffff',
-    borderRadius: 24,
-    padding: 32,
-    paddingTop: 48,
-    shadowColor: '#475569',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.1,
-    shadowRadius: 24,
-    elevation: 10,
-    borderTopWidth: 4,
-    borderBottomWidth: 4,
-    borderColor: '#9a7566', // Brownish border from mockup
-    position: 'relative',
-  },
-  iconWrapper: {
-    position: 'absolute',
-    top: -46,
-    left: 0,
-    right: 0,
+  headerArea: {
     alignItems: 'center',
-    zIndex: 10,
+    marginBottom: 40,
   },
-  iconCircle: {
-    width: 90,
-    height: 90,
-    backgroundColor: '#eef2ff',
-    borderRadius: 45,
+  logoCircle: {
+    width: 80,
+    height: 80,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 40,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 6,
-    borderColor: '#ffffff',
-    shadowColor: '#6366f1',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  appName: {
+    fontSize: 32,
+    fontWeight: '800',
+    color: '#ffffff',
+    letterSpacing: -0.5,
+  },
+  tagline: {
+    fontSize: 16,
+    color: 'rgba(255, 255, 255, 0.8)',
+    marginTop: 4,
+  },
+  glassCard: {
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    borderRadius: 32,
+    padding: 32,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 0.2,
+    shadowRadius: 40,
+    elevation: 20,
+  },
+  cardTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#1e293b',
+    textAlign: 'center',
+    marginBottom: 8,
   },
   subtitle: {
-    fontSize: 18,
+    fontSize: 15,
     textAlign: 'center',
     color: '#64748b',
-    marginBottom: 24,
-    fontWeight: '500',
-  },
-  divider: {
-    height: 1,
-    backgroundColor: '#f1f5f9',
+    lineHeight: 22,
     marginBottom: 32,
   },
-  inputContainer: {
+  inputStack: {
+    gap: 16,
+  },
+  inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#ffffff',
+    backgroundColor: '#f8fafc',
     borderRadius: 16,
     borderWidth: 1.5,
     borderColor: '#e2e8f0',
     paddingHorizontal: 16,
-    marginBottom: 24,
     height: 60,
   },
   inputIcon: {
@@ -252,38 +277,50 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 16,
     color: '#1e293b',
-    fontWeight: '500',
+    fontWeight: '600',
   },
-  button: {
-    backgroundColor: '#6366f1', // Vibrant Deep Indigo
+  primaryButton: {
+    backgroundColor: '#4f46e5',
     height: 60,
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#6366f1',
-    shadowOffset: { width: 0, height: 8 },
+    shadowColor: '#4f46e5',
+    shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.3,
-    shadowRadius: 12,
+    shadowRadius: 15,
     elevation: 8,
   },
+  btnContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   buttonDisabled: {
-    backgroundColor: '#c7d2fe', // Desaturated "Blur" Indigo
+    backgroundColor: '#c7d2fe',
     shadowOpacity: 0.1,
-    elevation: 2,
   },
   buttonText: {
     color: '#ffffff',
     fontSize: 18,
     fontWeight: '700',
-    letterSpacing: 0.5,
   },
-  backButton: {
-    marginTop: 20,
+  linkButton: {
+    marginTop: 16,
     alignItems: 'center',
   },
-  backButtonText: {
+  linkText: {
     color: '#6366f1',
     fontSize: 14,
     fontWeight: '600',
+  },
+  footer: {
+    marginTop: 40,
+    alignItems: 'center',
+  },
+  footerText: {
+    color: 'rgba(255, 255, 255, 0.6)',
+    fontSize: 12,
+    fontWeight: '500',
   },
 });
