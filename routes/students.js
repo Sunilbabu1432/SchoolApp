@@ -7,23 +7,30 @@ router.get('/', auth, async (req, res) => {
   try {
     const conn = await salesforceLogin();
 
-    const className = req.query.class; // 🔑 optional
+    const className = req.query.class;
+    const sectionName = req.query.section;
 
-    // ✅ BASE QUERY (same as before)
+    // ✅ BASE QUERY
     let query = `
-      SELECT Id, Name
+      SELECT Id, Name, Roll_No__c, Section__c
       FROM Account
       WHERE Type = 'Student'
     `;
 
-    // ✅ ONLY ADD FILTER IF CLASS IS SENT
+    // ✅ ADD FILTERS
     if (className) {
       query += ` AND Class__c = '${className}'`;
     }
+    if (sectionName && sectionName !== 'All') {
+      query += ` AND Section__c = '${sectionName}'`;
+    }
 
-    query += ' LIMIT 50';
+    query += ' LIMIT 100';
+
+    console.log('[STUDENTS FETCH] Generated SOQL:', query);
 
     const result = await conn.query(query);
+    console.log(`[STUDENTS FETCH] Found ${result.records.length} students`);
 
     res.json({
       success: true,

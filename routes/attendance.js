@@ -76,17 +76,20 @@ async function resolveSchema(conn) {
         // 3. Resolve Attendance_Session__c Fields
         const dSes = await conn.sobject('Attendance_Session__c').describe();
         schemaCache.Attendance_Session__c = {
-            class: findField(dSes.fields, ["class", "class__c"]),
+            class: findField(dSes.fields, ["class", "class__c", "Current_Class__c"]),
             section: findField(dSes.fields, ["section", "section__c"]),
-            date: findField(dSes.fields, ["date", "date__c"]),
-            teacher: findField(dSes.fields, ["teacher", "taken_by", "teacher__c"])
+            date: findField(dSes.fields, ["date", "date__c", "Attendance_Date__c", "Session_Date__c"]),
+            teacher: findField(dSes.fields, ["teacher", "taken_by", "teacher__c", "Teacher_Name__c"])
         };
 
         schemaCache.ts = Date.now();
-        console.log("[SCHEMA RESOLVED]", JSON.stringify(schemaCache));
+        console.log("[RESOLVE SCHEMA] Success for Attendance_Session__c:", {
+            id: sesInfo.id,
+            fields: schemaCache.Attendance_Session__c
+        });
         return schemaCache;
     } catch (err) {
-        console.error("[SCHEMA RESOLVE ERROR]", err.message);
+        console.error("[SCHEMA RESOLVE ERROR]", err.message, err.stack);
         return schemaCache;
     }
 }
@@ -103,48 +106,63 @@ router.get('/students', async (req, res) => {
         const att = schema.Attendance__c;
         const ses = schema.Attendance_Session__c;
 
-        // Fetch Students
-        let selectFields = `Id, Name, ${acc.class}`;
-        if (acc.section) selectFields += `, ${acc.section}`;
-        if (acc.roll) selectFields += `, ${acc.roll}`;
+        const dateLiteral = date ? String(date).split("T")[0] : null;
+        const escapedClass = escapeSOQL(classValue);
+        const escapedSection = sectionValue ? escapeSOQL(sectionValue) : null;
 
-        let soql = `SELECT ${selectFields} FROM Account 
-                    WHERE (${acc.class} = '${escapeSOQL(classValue)}' OR ${acc.class} = 'Class ${escapeSOQL(classValue)}')`;
-        if (sectionValue && acc.section) soql += ` AND ${acc.section} = '${escapeSOQL(sectionValue)}'`;
-        soql += " ORDER BY Name ASC LIMIT 500";
+        // Construct Queries
+        let studentFields = `Id, Name, ${acc.class}`;
+        if (acc.section) studentFields += `, ${acc.section}`;
+        if (acc.roll) studentFields += `, ${acc.roll}`;
 
-        const result = await conn.query(soql);
-        let records = result.records;
+        let studentSoql = `SELECT ${studentFields} FROM Account 
+                          WHERE (${acc.class} = '${escapedClass}' OR ${acc.class} = 'Class ${escapedClass}')`;
+        if (escapedSection && acc.section) studentSoql += ` AND ${acc.section} = '${escapedSection}'`;
+        studentSoql += " ORDER BY Name ASC LIMIT 500";
 
-        let sessionInfo = null;
-        if (date && records.length > 0) {
-            const dateLiteral = String(date).split("T")[0];
-            const studentIds = records.map(r => `'${r.Id}'`).join(",");
-
-            // Fetch Attendance
-            if (att.student && att.status && att.date) {
-                const attQuery = `SELECT ${att.student}, ${att.status} FROM Attendance__c 
-                                 WHERE ${att.date} = ${dateLiteral} AND ${att.student} IN (${studentIds})`;
-                const attRes = await conn.query(attQuery);
-                const attMap = new Map();
-                attRes.records.forEach(a => attMap.set(a[att.student], a[att.status]));
-                records = records.map(r => ({ ...r, Attendance_Status__c: attMap.get(r.Id) || null }));
-            }
-
-            // Fetch Session
-            if (ses.class && ses.date) {
-                const teacherRel = toRel(ses.teacher);
-                let sesSoql = `SELECT Id, ${teacherRel ? teacherRel + '.Name' : 'Id'} FROM Attendance_Session__c 
-                               WHERE ${ses.class} = '${escapeSOQL(classValue)}' AND ${ses.date} = ${dateLiteral}`;
-                if (sectionValue && ses.section) sesSoql += ` AND ${ses.section} = '${escapeSOQL(sectionValue)}'`;
-                const sesRes = await conn.query(sesSoql + " LIMIT 1");
-                if (sesRes.records.length > 0) {
-                    const s = sesRes.records[0];
-                    sessionInfo = { id: s.Id, takenBy: s[teacherRel] ? (s[teacherRel].Name || s[ses.teacher]) : "Unknown" };
+        let sessionPromise = Promise.resolve(null);
+        if (dateLiteral && ses.class && ses.date) {
+            const teacherRel = toRel(ses.teacher);
+            let sesSoql = `SELECT Id, ${teacherRel ? teacherRel + '.Name' : 'Id'} FROM Attendance_Session__c 
+                           WHERE ${ses.class} = '${escapedClass}' AND ${ses.date} = ${dateLiteral}`;
+            if (escapedSection && ses.section) sesSoql += ` AND ${ses.section} = '${escapedSection}'`;
+            sessionPromise = conn.query(sesSoql + " LIMIT 1").then(res => {
+                if (res.records.length > 0) {
+                    const s = res.records[0];
+                    return { id: s.Id, takenBy: s[teacherRel] ? (s[teacherRel].Name || s[ses.teacher]) : "Unknown" };
                 }
-            }
+                return null;
+            });
         }
-        res.json({ students: records, session: sessionInfo });
+
+        // We can ALSO fetch all attendance records for this class/section/date in parallel
+        // instead of waiting for student IDs.
+        let attendancePromise = Promise.resolve(new Map());
+        if (dateLiteral && att.class && att.date && att.status && att.student) {
+            let attSoql = `SELECT ${att.student}, ${att.status} FROM Attendance__c 
+                           WHERE ${att.date} = ${dateLiteral} AND (${att.class} = '${escapedClass}' OR ${att.class} = 'Class ${escapedClass}')`;
+            if (escapedSection && att.section) attSoql += ` AND ${att.section} = '${escapedSection}'`;
+
+            attendancePromise = conn.query(attSoql).then(res => {
+                const amap = new Map();
+                res.records.forEach(a => amap.set(a[att.student], a[att.status]));
+                return amap;
+            });
+        }
+
+        // Run everything in parallel
+        const [studentRes, sessionInfo, attendanceMap] = await Promise.all([
+            conn.query(studentSoql),
+            sessionPromise,
+            attendancePromise
+        ]);
+
+        const students = studentRes.records.map(r => ({
+            ...r,
+            Attendance_Status__c: attendanceMap.get(r.Id) || null
+        }));
+
+        res.json({ students, session: sessionInfo });
     } catch (err) {
         console.error("[BACKEND ATTENDANCE ERROR]", err.message);
         res.status(500).json({ error: err.message });
@@ -169,26 +187,34 @@ router.post('/save', async (req, res) => {
         // 1. Upsert Session
         if (ses.class && ses.date) {
             const shortClass = classValue.replace(/^Class\s+/i, "");
-            const sessionPayload = {
+            const sessionPayload = {};
+            if (ses.class) sessionPayload[ses.class] = shortClass;
+            if (ses.date) sessionPayload[ses.date] = dateLiteral;
+            if (ses.section) sessionPayload[ses.section] = sectionValue || "";
+            if (ses.teacher) sessionPayload[ses.teacher] = takenBy || "";
+
+            console.log("[SESSION UPSERT] Payload:", JSON.stringify(sessionPayload, null, 2));
+
+            const matchCriteria = {
                 [ses.class]: shortClass,
                 [ses.date]: dateLiteral
             };
-            if (ses.section) sessionPayload[ses.section] = sectionValue || "";
-            if (ses.teacher) sessionPayload[ses.teacher] = takenBy;
+            if (ses.section) matchCriteria[ses.section] = sectionValue || "";
 
-            let sessionMatch = `${ses.class} = '${escapeSOQL(shortClass)}' AND ${ses.date} = ${dateLiteral}`;
-            if (ses.section) sessionMatch += ` AND ${ses.section} = '${escapeSOQL(sectionValue || "")}'`;
-
-            const existingSession = await conn.sobject('Attendance_Session__c').find(sessionMatch).limit(1);
+            const existingSession = await conn.sobject('Attendance_Session__c').find(matchCriteria).limit(1);
 
             if (existingSession.length > 0) {
+                console.log("[SESSION EXISTS]", existingSession[0].Id);
                 const updatePayload = {};
                 if (ses.teacher) updatePayload[ses.teacher] = takenBy;
                 if (Object.keys(updatePayload).length > 0) {
                     await conn.sobject('Attendance_Session__c').record(existingSession[0].Id).update(updatePayload);
+                    console.log("[SESSION UPDATED]");
                 }
             } else {
-                await conn.sobject('Attendance_Session__c').create(sessionPayload);
+                console.log("[SESSION] Creating new record...");
+                const createRes = await conn.sobject('Attendance_Session__c').create(sessionPayload);
+                console.log("[SESSION] Create Result:", JSON.stringify(createRes, null, 2));
             }
         }
 

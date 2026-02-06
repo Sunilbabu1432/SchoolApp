@@ -1,6 +1,21 @@
 const jsforce = require('jsforce');
 
+let cachedConn = null;
+
 module.exports = async function salesforceLogin() {
+  if (cachedConn && cachedConn.accessToken) {
+    try {
+      // Periodic check or just try to use it. 
+      // jsforce handles some re-authentication if oauth2 is configured, 
+      // but simple reuse is a huge win for speed.
+      await cachedConn.identity();
+      return cachedConn;
+    } catch (err) {
+      console.log('🔄 Salesforce session expired, re-logging...');
+      cachedConn = null;
+    }
+  }
+
   const conn = new jsforce.Connection({
     oauth2: {
       loginUrl: process.env.SF_LOGIN_URL,
@@ -16,5 +31,6 @@ module.exports = async function salesforceLogin() {
   );
 
   console.log('✅ Salesforce connected via OAuth');
+  cachedConn = conn;
   return conn;
 };
