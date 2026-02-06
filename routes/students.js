@@ -12,7 +12,7 @@ router.get('/', auth, async (req, res) => {
 
     // ✅ BASE QUERY
     let query = `
-      SELECT Id, Name, Roll_No__c, Section__c
+      SELECT Id, Name, Section__c
       FROM Account
       WHERE Type = 'Student'
     `;
