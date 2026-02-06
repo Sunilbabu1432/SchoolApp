@@ -20,12 +20,13 @@ export default function Login() {
   const [otp, setOtp] = useState('');
   const [showOtpInput, setShowOtpInput] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [loginSuccess, setLoginSuccess] = useState(false);
   const router = useRouter();
 
   const isMobileReady = mobile.length === 10;
   const isOtpReady = otp.length === 6;
 
-  const saveFcmToken = async (authToken: string) => {
+  const saveFcmToken = async () => {
     try {
       const authStatus = await messaging().requestPermission();
       const enabled =
@@ -34,7 +35,6 @@ export default function Login() {
 
       if (!enabled) return;
 
-      api.defaults.headers.common.Authorization = `Bearer ${authToken}`;
       const token = await messaging().getToken();
       await api.post('/save-token', { token });
     } catch (err) {
@@ -62,7 +62,11 @@ export default function Login() {
     try {
       const res = await api.post('/auth/login', { mobile, otp });
       await AsyncStorage.setItem('token', res.data.token);
-      await saveFcmToken(res.data.token);
+
+      // We don't need to manually set the header here because 
+      // the api.ts interceptor will pick it up from AsyncStorage
+      await saveFcmToken();
+
       await AsyncStorage.setItem(
         'user',
         JSON.stringify({
@@ -73,10 +77,14 @@ export default function Login() {
       );
 
       const role = res.data.role;
-      if (role === 'Teacher') router.replace('/teacherHome');
-      else if (role === 'Manager') router.replace('/managerHome');
-      else if (role === 'Parent') router.replace('/parentHome');
-      else alert('Unknown role');
+      setLoginSuccess(true);
+
+      setTimeout(() => {
+        if (role === 'Teacher') router.replace('/teacherHome');
+        else if (role === 'Manager') router.replace('/managerHome');
+        else if (role === 'Parent') router.replace('/parentHome');
+        else alert('Unknown role');
+      }, 1500);
 
     } catch (err: any) {
       const msg = err.response?.data?.message || err.message || 'Login failed';
@@ -85,6 +93,20 @@ export default function Login() {
       setLoading(false);
     }
   };
+
+  if (loginSuccess) {
+    return (
+      <View style={styles.overlayContainer}>
+        <View style={styles.successCard}>
+          <View style={styles.successIconCircle}>
+            <Ionicons name="checkmark-circle" size={80} color="#22c55e" />
+          </View>
+          <Text style={styles.successTitle}>Login Successful</Text>
+          <Text style={styles.successSubtitle}>Preparing your dashboard...</Text>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <KeyboardAvoidingView
@@ -198,6 +220,41 @@ const styles = StyleSheet.create({
     borderBottomWidth: 4,
     borderColor: '#9a7566',
     position: 'relative',
+  },
+  overlayContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.7)', // Semi-transparent dark overlay
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  successCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 28,
+    padding: 40,
+    width: '90%',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 0.3,
+    shadowRadius: 30,
+    elevation: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  successIconCircle: {
+    marginBottom: 20,
+  },
+  successTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#1e293b',
+    marginBottom: 8,
+  },
+  successSubtitle: {
+    fontSize: 16,
+    color: '#64748b',
+    textAlign: 'center',
   },
   iconWrapper: {
     position: 'absolute',
