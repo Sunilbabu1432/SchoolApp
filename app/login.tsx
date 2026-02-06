@@ -15,7 +15,6 @@ import api from '../services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import messaging from '@react-native-firebase/messaging';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 
 const { width } = Dimensions.get('window');
 
@@ -91,10 +90,7 @@ export default function Login() {
   };
 
   return (
-    <LinearGradient
-      colors={['#4f46e5', '#7c3aed']}
-      style={styles.container}
-    >
+    <View style={[styles.container, { backgroundColor: '#4f46e5' }]}>
       <KeyboardAvoidingView
         style={styles.wrapper}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -194,7 +190,7 @@ export default function Login() {
           <Text style={styles.footerText}>Secure Login Powered by Salesforce</Text>
         </View>
       </KeyboardAvoidingView>
-    </LinearGradient>
+    </View>
   );
 }
 
