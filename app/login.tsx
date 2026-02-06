@@ -6,6 +6,7 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
@@ -16,7 +17,13 @@ import { Ionicons } from '@expo/vector-icons';
 
 export default function Login() {
   const [mobile, setMobile] = useState('');
+  const [otp, setOtp] = useState('');
+  const [showOtpInput, setShowOtpInput] = useState(false);
+  const [loading, setLoading] = useState(false);
   const router = useRouter();
+
+  const isMobileReady = mobile.length === 10;
+  const isOtpReady = otp.length === 6;
 
   const saveFcmToken = async (authToken: string) => {
     try {
@@ -35,15 +42,32 @@ export default function Login() {
     }
   };
 
-  const login = async () => {
-    if (!mobile) return alert('Enter mobile number');
+  const handleRequestOtp = async () => {
+    if (!isMobileReady) return;
+    setLoading(true);
     try {
-      const res = await api.post('/auth/login', { mobile });
+      await api.post('/auth/request-otp', { mobile });
+      setShowOtpInput(true);
+      alert('OTP sent successfully. Please check your console/device.');
+    } catch (err: any) {
+      const msg = err.response?.data?.message || err.message || 'Request failed';
+      alert(`OTP Request Failed: ${msg}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    if (!isOtpReady) return;
+    setLoading(true);
+    try {
+      const res = await api.post('/auth/login', { mobile, otp });
       await AsyncStorage.setItem('token', res.data.token);
       await saveFcmToken(res.data.token);
       await AsyncStorage.setItem(
         'user',
         JSON.stringify({
+          id: res.data.contactId,
           name: res.data.name,
           role: res.data.role,
         })
@@ -57,7 +81,9 @@ export default function Login() {
 
     } catch (err: any) {
       const msg = err.response?.data?.message || err.message || 'Login failed';
-      alert(`Login Failed: ${msg}`);
+      alert(`Verification Failed: ${msg}`);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -73,25 +99,79 @@ export default function Login() {
           </View>
         </View>
 
-        <Text style={styles.subtitle}>Sign in to access your dashboard.</Text>
+        <Text style={styles.subtitle}>
+          {showOtpInput ? 'Enter the security code sent to you.' : 'Sign in to access your dashboard.'}
+        </Text>
 
         <View style={styles.divider} />
 
-        <View style={styles.inputContainer}>
-          <Ionicons name="phone-portrait-outline" size={24} color="#6366f1" style={styles.inputIcon} />
-          <TextInput
-            placeholder="Mobile Number"
-            placeholderTextColor="#94a3b8"
-            value={mobile}
-            onChangeText={setMobile}
-            keyboardType="phone-pad"
-            style={styles.input}
-          />
-        </View>
+        {!showOtpInput ? (
+          <>
+            <View style={styles.inputContainer}>
+              <Ionicons name="phone-portrait-outline" size={24} color="#6366f1" style={styles.inputIcon} />
+              <TextInput
+                placeholder="Mobile Number"
+                placeholderTextColor="#94a3b8"
+                value={mobile}
+                onChangeText={setMobile}
+                keyboardType="phone-pad"
+                style={styles.input}
+              />
+            </View>
 
-        <TouchableOpacity style={styles.button} onPress={login} activeOpacity={0.8}>
-          <Text style={styles.buttonText}>Login</Text>
-        </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.button, (!isMobileReady || loading) && styles.buttonDisabled]}
+              onPress={handleRequestOtp}
+              activeOpacity={0.8}
+              disabled={loading || !isMobileReady}
+            >
+              {loading ? (
+                <ActivityIndicator color="#ffffff" />
+              ) : (
+                <Text style={styles.buttonText}>Get OTP</Text>
+              )}
+            </TouchableOpacity>
+          </>
+        ) : (
+          <>
+            <View style={styles.inputContainer}>
+              <Ionicons name="shield-checkmark-outline" size={24} color="#6366f1" style={styles.inputIcon} />
+              <TextInput
+                placeholder="Enter 6-digit OTP"
+                placeholderTextColor="#94a3b8"
+                value={otp}
+                onChangeText={setOtp}
+                keyboardType="number-pad"
+                maxLength={6}
+                style={styles.input}
+              />
+            </View>
+
+            <TouchableOpacity
+              style={[styles.button, (!isOtpReady || loading) && styles.buttonDisabled]}
+              onPress={handleVerifyOtp}
+              activeOpacity={0.8}
+              disabled={loading || !isOtpReady}
+            >
+              {loading ? (
+                <ActivityIndicator color="#ffffff" />
+              ) : (
+                <Text style={styles.buttonText}>Verify & Login</Text>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.backButton}
+              onPress={() => {
+                setShowOtpInput(false);
+                setOtp('');
+              }}
+              disabled={loading}
+            >
+              <Text style={styles.backButtonText}>Back to login</Text>
+            </TouchableOpacity>
+          </>
+        )}
       </View>
     </KeyboardAvoidingView>
   );
@@ -175,21 +255,35 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   button: {
-    backgroundColor: '#a5b4fc', // Soft purple from mockup
+    backgroundColor: '#6366f1', // Vibrant Deep Indigo
     height: 60,
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#a5b4fc',
+    shadowColor: '#6366f1',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.3,
     shadowRadius: 12,
     elevation: 8,
+  },
+  buttonDisabled: {
+    backgroundColor: '#c7d2fe', // Desaturated "Blur" Indigo
+    shadowOpacity: 0.1,
+    elevation: 2,
   },
   buttonText: {
     color: '#ffffff',
     fontSize: 18,
     fontWeight: '700',
     letterSpacing: 0.5,
+  },
+  backButton: {
+    marginTop: 20,
+    alignItems: 'center',
+  },
+  backButtonText: {
+    color: '#6366f1',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

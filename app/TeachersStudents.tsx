@@ -15,7 +15,7 @@ import api from '../services/api';
 import { Ionicons } from '@expo/vector-icons';
 
 export default function TeachersStudents() {
-  const { className } = useLocalSearchParams(); // 🔑 selected class
+  const { className, sectionName } = useLocalSearchParams(); // 🔑 selected class & section
   const router = useRouter();
   const [students, setStudents] = useState<any[]>([]);
   const [filteredStudents, setFilteredStudents] = useState<any[]>([]);
@@ -26,13 +26,14 @@ export default function TeachersStudents() {
     if (className) {
       loadStudents();
     }
-  }, [className]);
+  }, [className, sectionName]);
 
   const loadStudents = async () => {
     try {
       setLoading(true);
+      const sectionParam = sectionName && sectionName !== 'All' ? `&section=${encodeURIComponent(String(sectionName))}` : '';
       const res = await api.get(
-        `/students?class=${encodeURIComponent(String(className))}`
+        `/students?class=${encodeURIComponent(String(className))}${sectionParam}`
       );
       const data = res.data.students || [];
       setStudents(data);
@@ -80,7 +81,7 @@ export default function TeachersStudents() {
           </TouchableOpacity>
           <View style={styles.headerTitleContainer}>
             <Text style={styles.headerLabel}>STUDENTS LIST</Text>
-            <Text style={styles.headerTitle}>{className}</Text>
+            <Text style={styles.headerTitle}>{className} {sectionName && sectionName !== 'All' ? `- ${sectionName}` : ''}</Text>
           </View>
           <View style={styles.countBadge}>
             <Text style={styles.countText}>{filteredStudents.length}</Text>
@@ -123,6 +124,7 @@ export default function TeachersStudents() {
                     studentId: item.Id,
                     studentName: item.Name,
                     className,
+                    sectionName,
                   },
                 })
               }

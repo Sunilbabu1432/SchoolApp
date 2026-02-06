@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { useEffect, useMemo, useState } from 'react';
 import api from '../services/api';
+import { logout } from '../utils/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -87,9 +88,9 @@ export default function ParentHome() {
             <Text style={styles.welcomeText}>Welcome,</Text>
             <Text style={styles.parentName}>{parentName || 'Parent'}</Text>
           </View>
-          <View style={styles.profileCircle}>
-            <Ionicons name="person" size={24} color="#6366f1" />
-          </View>
+          <TouchableOpacity style={styles.logoutCircle} onPress={logout}>
+            <Ionicons name="log-out-outline" size={24} color="#ef4444" />
+          </TouchableOpacity>
         </View>
 
         <View style={styles.studentCard}>
@@ -197,13 +198,17 @@ const styles = StyleSheet.create({
   },
   welcomeText: { color: '#c7d2fe', fontSize: 16, fontWeight: '500' },
   parentName: { color: '#ffffff', fontSize: 22, fontWeight: '700' },
-  profileCircle: {
+  logoutCircle: {
     width: 48,
     height: 48,
     backgroundColor: '#ffffff',
     borderRadius: 24,
     justifyContent: 'center',
     alignItems: 'center',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
   },
   studentCard: {
     backgroundColor: '#ffffff',
@@ -243,7 +248,7 @@ const styles = StyleSheet.create({
   examActive: { backgroundColor: '#6366f1', borderColor: '#6366f1' },
   examText: { color: '#64748b', fontWeight: '600', fontSize: 14 },
   examTextActive: { color: '#ffffff' },
-  listPadding: { paddingBottom: 20 },
+  listPadding: { paddingBottom: 160 }, // 🔥 Increased for flexibility
   card: {
     backgroundColor: '#ffffff',
     padding: 18,
@@ -270,18 +275,20 @@ const styles = StyleSheet.create({
   marksText: { fontSize: 18, fontWeight: '800', color: '#10b981' },
   maxText: { fontSize: 12, color: '#94a3b8', marginTop: 2 },
   footer: {
+    position: 'absolute',
+    bottom: Platform.OS === 'ios' ? 35 : 25,
+    left: 15,
+    right: 15,
     padding: 20,
-    paddingBottom: Platform.OS === 'ios' ? 40 : 30, // 🔥 FIX: Add bottom padding
     backgroundColor: '#ffffff',
-    borderTopWidth: 1,
-    borderTopColor: '#f1f5f9',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    elevation: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -10 },
-    shadowOpacity: 0.05,
-    shadowRadius: 15,
+    borderRadius: 24,
+    elevation: 12,
+    shadowColor: '#1e293b',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
   },
   footerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   footerLabel: { fontSize: 11, color: '#94a3b8', fontWeight: '800', letterSpacing: 1 },

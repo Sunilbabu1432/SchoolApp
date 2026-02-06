@@ -1,4 +1,5 @@
-import { View, Text, TouchableOpacity, StyleSheet, FlatList, SafeAreaView, StatusBar } from 'react-native';
+import { useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, FlatList, SafeAreaView, StatusBar, Modal, ScrollView, Dimensions, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -8,8 +9,28 @@ const CLASSES = [
   'Class-6', 'Class-7', 'Class-8', 'Class-9', 'Class-10',
 ];
 
+const SECTIONS = ['A', 'B', 'C', 'D'];
+
 export default function TeacherClasses() {
   const router = useRouter();
+  const [showSectionPicker, setShowSectionPicker] = useState(false);
+  const [selectedClass, setSelectedClass] = useState<string | null>(null);
+
+  const handleClassPress = (className: string) => {
+    setSelectedClass(className);
+    setShowSectionPicker(true);
+  };
+
+  const handleSectionSelect = (sectionName: string) => {
+    setShowSectionPicker(false);
+    router.push({
+      pathname: '/TeachersStudents',
+      params: {
+        className: selectedClass,
+        sectionName: sectionName || 'All'
+      },
+    });
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -33,12 +54,7 @@ export default function TeacherClasses() {
           <TouchableOpacity
             activeOpacity={0.7}
             style={styles.card}
-            onPress={() =>
-              router.push({
-                pathname: '/TeachersStudents',
-                params: { className: item },
-              })
-            }
+            onPress={() => handleClassPress(item)}
           >
             <View style={styles.iconBox}>
               <Ionicons name="school-outline" size={20} color="#6366f1" />
@@ -48,6 +64,38 @@ export default function TeacherClasses() {
           </TouchableOpacity>
         )}
       />
+
+      {/* Section Picker Modal (Popup Card style) */}
+      <Modal visible={showSectionPicker} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <View>
+                <Text style={styles.modalLabel}>SELECT SECTION</Text>
+                <Text style={styles.modalTitle}>{selectedClass}</Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowSectionPicker(false)}>
+                <Ionicons name="close-circle" size={32} color="#cbd5e1" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.gridContainer}>
+              {['', ...SECTIONS].map((sec) => (
+                <TouchableOpacity
+                  key={sec}
+                  style={styles.gridItem}
+                  onPress={() => handleSectionSelect(sec)}
+                >
+                  <View style={styles.gridIconBox}>
+                    <Ionicons name="layers-outline" size={24} color="#6366f1" />
+                  </View>
+                  <Text style={styles.gridText}>{sec || 'All Sections'}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -103,4 +151,60 @@ const styles = StyleSheet.create({
     marginRight: 16,
   },
   text: { flex: 1, fontSize: 17, fontWeight: '700', color: '#1e293b' },
+
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalCard: {
+    backgroundColor: '#fff',
+    width: Dimensions.get('window').width * 0.85,
+    borderRadius: 28,
+    padding: 24,
+    elevation: 20,
+    shadowColor: '#6366f1',
+    shadowOpacity: 0.2,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 10 },
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  modalLabel: { fontSize: 11, color: '#94a3b8', fontWeight: '800', letterSpacing: 1 },
+  modalTitle: { fontSize: 24, fontWeight: '800', color: '#1e293b', marginTop: 2 },
+  gridContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between', // 📏 Better alignment
+  },
+  gridItem: {
+    width: '47%',
+    backgroundColor: '#f8fafc',
+    borderRadius: 20,
+    padding: 16,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
+    marginBottom: 16,
+  },
+  gridIconBox: {
+    width: 48,
+    height: 48,
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+    elevation: 2,
+    shadowColor: '#6366f1',
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+  },
+  gridText: { fontSize: 15, fontWeight: '700', color: '#475569' },
 });

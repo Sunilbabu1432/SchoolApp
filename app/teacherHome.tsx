@@ -9,10 +9,13 @@ import {
   FlatList,
   SafeAreaView,
   StatusBar,
+  Dimensions,
+  Platform,
 } from 'react-native';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
 import api from '../services/api';
+import { logout } from '../utils/auth';
 import messaging from '@react-native-firebase/messaging';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
@@ -22,8 +25,11 @@ export default function TeacherHome() {
 
   const [loading, setLoading] = useState(true);
   const [showDropdown, setShowDropdown] = useState(false);
+  const [showSectionPicker, setShowSectionPicker] = useState(false);
   const [selectedClass, setSelectedClass] = useState<string | null>(null);
   const [teacherName, setTeacherName] = useState('');
+
+  const sections = ['A', 'B', 'C', 'D'];
 
   const classes = [
     'Nursery', 'LKG', 'UKG', 'Class-1', 'Class-2', 'Class-3',
@@ -122,9 +128,9 @@ export default function TeacherHome() {
             <Text style={styles.welcomeLabel}>Good Day,</Text>
             <Text style={styles.teacherName}>{teacherName || 'Teacher'}</Text>
           </View>
-          <View style={styles.profileCircle}>
-            <Ionicons name="school" size={26} color="#6366f1" />
-          </View>
+          <TouchableOpacity style={styles.logoutCircle} onPress={logout}>
+            <Ionicons name="log-out-outline" size={24} color="#ef4444" />
+          </TouchableOpacity>
         </View>
 
         <View style={styles.heroCard}>
@@ -201,10 +207,7 @@ export default function TeacherHome() {
                   onPress={() => {
                     setSelectedClass(item);
                     setShowDropdown(false);
-                    router.push({
-                      pathname: '/TeachersStudents',
-                      params: { className: item },
-                    });
+                    setShowSectionPicker(true);
                   }}
                 >
                   <Text style={styles.optionText}>{item}</Text>
@@ -219,6 +222,47 @@ export default function TeacherHome() {
             >
               <Text style={styles.closeBtnText}>Cancel</Text>
             </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* 4. Section Picker Modal (Popup style) */}
+      <Modal visible={showSectionPicker} transparent animationType="fade">
+        <View style={styles.sectionOverlay}>
+          <View style={styles.sectionCard}>
+            <View style={styles.sectionHeader}>
+              <View>
+                <Text style={styles.sectionLabel}>SELECT SECTION</Text>
+                <Text style={styles.sectionTitleModal}>{selectedClass}</Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowSectionPicker(false)}>
+                <Ionicons name="close-circle" size={32} color="#cbd5e1" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.gridContainer}>
+              {['', ...sections].map((sec) => (
+                <TouchableOpacity
+                  key={sec}
+                  style={styles.gridItem}
+                  onPress={() => {
+                    setShowSectionPicker(false);
+                    router.push({
+                      pathname: '/TeachersStudents',
+                      params: {
+                        className: selectedClass,
+                        sectionName: sec || 'All'
+                      },
+                    });
+                  }}
+                >
+                  <View style={styles.gridIconBox}>
+                    <Ionicons name="layers-outline" size={24} color="#6366f1" />
+                  </View>
+                  <Text style={styles.gridText}>{sec || 'All Sections'}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
           </View>
         </View>
       </Modal>
@@ -248,11 +292,11 @@ const styles = StyleSheet.create({
   },
   welcomeLabel: { color: '#c7d2fe', fontSize: 14, fontWeight: '500' },
   teacherName: { color: '#ffffff', fontSize: 24, fontWeight: '700' },
-  profileCircle: {
-    width: 52,
-    height: 52,
+  logoutCircle: {
+    width: 48,
+    height: 48,
     backgroundColor: '#ffffff',
-    borderRadius: 26,
+    borderRadius: 24,
     justifyContent: 'center',
     alignItems: 'center',
     elevation: 4,
@@ -363,4 +407,61 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   closeBtnText: { color: '#64748b', fontWeight: '700', fontSize: 16 },
+
+  // 🔥 Section Picker Styles
+  sectionOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  sectionCard: {
+    backgroundColor: '#fff',
+    width: Dimensions.get('window').width * 0.85,
+    borderRadius: 28,
+    padding: 24,
+    elevation: 20,
+    shadowColor: '#6366f1',
+    shadowOpacity: 0.2,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 10 },
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  sectionLabel: { fontSize: 11, color: '#94a3b8', fontWeight: '800', letterSpacing: 1 },
+  sectionTitleModal: { fontSize: 24, fontWeight: '800', color: '#1e293b', marginTop: 2 },
+  gridContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  gridItem: {
+    width: '47%',
+    backgroundColor: '#f8fafc',
+    borderRadius: 20,
+    padding: 16,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
+    marginBottom: 16,
+  },
+  gridIconBox: {
+    width: 48,
+    height: 48,
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+    elevation: 2,
+    shadowColor: '#6366f1',
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+  },
+  gridText: { fontSize: 15, fontWeight: '700', color: '#475569' },
 });
