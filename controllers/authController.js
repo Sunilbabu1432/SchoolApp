@@ -1,5 +1,36 @@
 const jwt = require('jsonwebtoken');
 const salesforceLogin = require('../config/salesforce');
+const nodemailer = require('nodemailer');
+
+// Helper to send Email OTP
+const sendEmailOtp = async (to, otp) => {
+  const transporter = nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: process.env.SMTP_PORT,
+    secure: process.env.SMTP_PORT == 465, // true for 465, false for other ports
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS,
+    },
+  });
+
+  const mailOptions = {
+    from: `"SchoolApp Security" <${process.env.SMTP_USER}>`,
+    to: to,
+    subject: 'Your SchoolApp Verification Code',
+    text: `Your OTP for SchoolApp registration is: ${otp}. This code is valid for 5 minutes.`,
+    html: `
+      <div style="font-family: sans-serif; padding: 20px; color: #333;">
+        <h2>SchoolApp Verification</h2>
+        <p>Your OTP for registration is:</p>
+        <h1 style="color: #6366f1; letter-spacing: 5px;">${otp}</h1>
+        <p>This code is valid for 5 minutes. Do not share it with anyone.</p>
+      </div>
+    `,
+  };
+
+  await transporter.sendMail(mailOptions);
+};
 
 // Temporary in-memory storage for OTPs. 
 // In production, use Redis or a database with TTL.
@@ -7,7 +38,7 @@ const otpStore = new Map();
 
 exports.requestOtp = async (req, res) => {
   try {
-    const { mobile } = req.body;
+    const { mobile, channel } = req.body; // channel can be 'email' or 'sms' (simulated)
     if (!mobile) {
       return res.status(400).json({ message: 'Mobile required' });
     }
@@ -15,8 +46,9 @@ exports.requestOtp = async (req, res) => {
     const conn = await salesforceLogin();
 
     // Verify if mobile number exists in Salesforce
+    // Fetching Email as well for the Email OTP flow
     const result = await conn.query(`
-      SELECT Id, Name, Type__c, MobilePhone
+      SELECT Id, Name, Type__c, MobilePhone, Email
       FROM Contact
       WHERE MobilePhone = '${mobile}'
       LIMIT 1
@@ -25,6 +57,8 @@ exports.requestOtp = async (req, res) => {
     if (!result.records.length) {
       return res.status(401).json({ message: 'No contact found with this mobile number' });
     }
+
+    const contact = result.records[0];
 
     // Generate 6-digit OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
@@ -35,12 +69,20 @@ exports.requestOtp = async (req, res) => {
       expiresAt: Date.now() + 5 * 60 * 1000
     });
 
-    // 🚀 SIMULATION: Log OTP to console (In real app, send via SMS)
-    console.log(`------------------------------`);
-    console.log(`📱 OTP for ${mobile}: ${otp}`);
-    console.log(`------------------------------`);
+    if (channel === 'email') {
+      if (!contact.Email) {
+        return res.status(400).json({ message: 'No email address associated with this contact' });
+      }
+      await sendEmailOtp(contact.Email, otp);
+      console.log(`📧 OTP sent via Email to ${contact.Email}`);
+    } else {
+      // 🚀 SIMULATION: Log OTP to console (In real app, send via SMS/MSG91)
+      console.log(`------------------------------`);
+      console.log(`📱 OTP for ${mobile}: ${otp} (SIMULATED SMS)`);
+      console.log(`------------------------------`);
+    }
 
-    res.json({ message: 'OTP sent successfully' });
+    res.json({ message: `OTP sent successfully via ${channel || 'SMS'}` });
 
   } catch (err) {
     console.error(err);
